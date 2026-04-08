@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SafetyMA — Pharmacovigilance Meta-Analysis</title>
+<meta property="og:title" content="SafetyMA — Drug Safety Meta-Analysis">
+<meta property="og:description" content="Browser-based pharmacovigilance MA: Peto OR, MH, rare events, double-zero handling, sequential safety monitoring.">
+<style>
+:root {
+  --bg:#0a0e17;--surface:#131926;--surface2:#1a2236;--border:#2a3450;
+  --text:#e2e8f0;--text2:#94a3b8;--accent:#ef4444;--accent2:#f87171;
+  --green:#22c55e;--amber:#f59e0b;--cyan:#06b6d4;--indigo:#6366f1;
+  --radius:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+.container{max-width:1400px;margin:0 auto;padding:20px}
+header{text-align:center;padding:30px 0 20px;border-bottom:1px solid var(--border);margin-bottom:24px}
+header h1{font-size:2rem;background:linear-gradient(135deg,var(--accent),var(--amber));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+header p{color:var(--text2);margin-top:6px;font-size:0.95rem}
+.tabs{display:flex;gap:4px;margin-bottom:20px;flex-wrap:wrap}
+.tab{padding:10px 20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;color:var(--text2);transition:all 0.2s;font-size:0.9rem}
+.tab:hover{border-color:var(--accent);color:var(--text)}
+.tab.active{background:var(--accent);color:white;border-color:var(--accent)}
+.panel{display:none}.panel.active{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+.card h3{font-size:1.1rem;margin-bottom:12px;color:var(--accent2)}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+@media(max-width:900px){.grid-2,.grid-3{grid-template-columns:1fr}}
+label{display:block;font-size:0.85rem;color:var(--text2);margin-bottom:4px}
+input,select,textarea{width:100%;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.9rem}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+textarea{font-family:'Consolas',monospace;resize:vertical}
+.btn{padding:10px 20px;border:none;border-radius:var(--radius);cursor:pointer;font-size:0.9rem;font-weight:600;transition:all 0.2s}
+.btn-primary{background:var(--accent);color:white}.btn-primary:hover{background:var(--accent2)}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}.btn-secondary:hover{border-color:var(--accent)}
+.btn-sm{padding:6px 14px;font-size:0.82rem}
+.btn-group{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+table{width:100%;border-collapse:collapse;font-size:0.88rem}
+th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)}
+th{color:var(--text2);font-weight:600;font-size:0.82rem;text-transform:uppercase;letter-spacing:0.5px}
+tr:hover{background:var(--surface2)}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.stat-box{background:var(--surface2);border-radius:var(--radius);padding:14px;text-align:center}
+.stat-box .value{font-size:1.4rem;font-weight:700;color:var(--accent2)}
+.stat-box .label{font-size:0.78rem;color:var(--text2);margin-top:4px}
+.plot-container{background:var(--surface2);border-radius:var(--radius);padding:16px;margin-top:12px}
+canvas{width:100%;background:transparent}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:600}
+.badge-green{background:rgba(34,197,94,0.15);color:var(--green)}
+.badge-red{background:rgba(239,68,68,0.15);color:var(--accent)}
+.badge-amber{background:rgba(245,158,11,0.15);color:var(--amber)}
+.info-box{background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:var(--radius);padding:14px;margin-bottom:16px;font-size:0.88rem;color:var(--text2)}
+footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;border-top:1px solid var(--border);margin-top:30px}
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+  <h1>SafetyMA</h1>
+  <p>Pharmacovigilance Meta-Analysis — Peto OR, Mantel-Haenszel, rare events, sequential safety monitoring</p>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('data')">Data Input</div>
+  <div class="tab" onclick="showTab('results')">Results</div>
+  <div class="tab" onclick="showTab('forest')">Forest Plot</div>
+  <div class="tab" onclick="showTab('labbe')">L'Abbe Plot</div>
+  <div class="tab" onclick="showTab('cumulative')">Cumulative Safety</div>
+  <div class="tab" onclick="showTab('funnel')">Funnel Plot</div>
+  <div class="tab" onclick="showTab('guide')">Guide</div>
+</div>
+
+<!-- DATA INPUT -->
+<div class="panel active" id="panel-data">
+  <div class="card">
+    <h3>Load Example</h3>
+    <div class="btn-group">
+      <button class="btn btn-secondary btn-sm" onclick="loadExample('rosiglitazone')">Rosiglitazone CV (Nissen 2007)</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadExample('ssri_suicide')">SSRI & Suicidality (rare events)</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadExample('nsaid_gi')">NSAIDs & GI Bleeding</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Study Data (2×2 tables)</h3>
+    <div class="info-box">
+      Enter one study per line: Study name, events_treatment, n_treatment, events_control, n_control. Tab/comma separated.
+    </div>
+    <div class="grid-2">
+      <div><label>Drug / Treatment name</label><input type="text" id="drugName" value="Rosiglitazone" placeholder="Treatment"></div>
+      <div><label>Safety outcome</label><input type="text" id="outcomeName" value="Myocardial infarction" placeholder="Adverse event"></div>
+    </div>
+    <div style="margin-top:12px">
+      <label>Study data (study, events_trt, n_trt, events_ctrl, n_ctrl)</label>
+      <textarea id="dataInput" rows="14" placeholder="Study1  5  100  2  100&#10;Study2  0  50  0  48"></textarea>
+    </div>
+    <div class="grid-3" style="margin-top:12px">
+      <div><label>Zero-cell correction</label>
+        <select id="zcCorrection">
+          <option value="0.5">Add 0.5 (traditional)</option>
+          <option value="reciprocal">Reciprocal (treatment-arm)</option>
+          <option value="empirical">Empirical (Sweeting)</option>
+          <option value="none">None (exclude single-zero)</option>
+        </select>
+      </div>
+      <div><label>Double-zero studies</label>
+        <select id="doubleZero">
+          <option value="exclude">Exclude (standard)</option>
+          <option value="include">Include with correction</option>
+        </select>
+      </div>
+      <div><label>Significance level (α)</label>
+        <input type="number" id="alpha" value="0.05" step="0.01" min="0.001" max="0.2">
+      </div>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="runAnalysis()">Run Safety MA</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+    </div>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div class="panel" id="panel-results">
+  <div class="card"><h3>Summary</h3><div id="summaryStats" class="stat-grid"></div></div>
+  <div class="card">
+    <h3>Method Comparison</h3>
+    <table id="methodTable"><thead><tr><th>Method</th><th>OR</th><th>95% CI</th><th>P-value</th><th>Studies</th><th>Note</th></tr></thead><tbody></tbody></table>
+  </div>
+  <div class="card">
+    <h3>Heterogeneity</h3>
+    <table id="hetTable"><thead><tr><th>Method</th><th>Q</th><th>df</th><th>P</th><th>I²</th><th>τ²</th></tr></thead><tbody></tbody></table>
+  </div>
+  <div class="card">
+    <h3>Zero-Cell Summary</h3>
+    <div id="zeroCellSummary"></div>
+  </div>
+  <div class="card">
+    <h3>Study Details</h3>
+    <table id="studyTable"><thead><tr><th>Study</th><th>E_trt</th><th>N_trt</th><th>E_ctrl</th><th>N_ctrl</th><th>OR</th><th>95% CI</th><th>Weight (MH%)</th><th>Flag</th></tr></thead><tbody></tbody></table>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-secondary btn-sm" onclick="exportCSV()">Export CSV</button>
+  </div>
+</div>
+
+<!-- FOREST -->
+<div class="panel" id="panel-forest">
+  <div class="card"><h3>Forest Plot</h3>
+    <div class="plot-container"><canvas id="forestCanvas" width="950" height="600"></canvas></div>
+    <div class="btn-group"><button class="btn btn-secondary btn-sm" onclick="exportPlot('forestCanvas','safety_forest')">Export PNG</button></div>
+  </div>
+</div>
+
+<!-- L'ABBE -->
+<div class="panel" id="panel-labbe">
+  <div class="card"><h3>L'Abbe Plot</h3>
+    <p style="color:var(--text2);font-size:0.85rem;margin-bottom:8px">Treatment event rate vs control event rate. Points above diagonal = treatment has higher risk.</p>
+    <div class="plot-container"><canvas id="labbeCanvas" width="700" height="700"></canvas></div>
+  </div>
+</div>
+
+<!-- CUMULATIVE SAFETY -->
+<div class="panel" id="panel-cumulative">
+  <div class="card"><h3>Cumulative Safety Monitoring (Peto OR)</h3>
+    <p style="color:var(--text2);font-size:0.85rem;margin-bottom:8px">Studies added chronologically. O'Brien-Fleming monitoring boundaries shown.</p>
+    <div class="plot-container"><canvas id="cumulCanvas" width="950" height="500"></canvas></div>
+    <table id="cumulTable" style="margin-top:12px">
+      <thead><tr><th>Study Added</th><th>Cumulative OR</th><th>95% CI</th><th>Z</th><th>OBF Boundary</th><th>Signal?</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- FUNNEL -->
+<div class="panel" id="panel-funnel">
+  <div class="card"><h3>Funnel Plot (log OR vs SE)</h3>
+    <div class="plot-container"><canvas id="funnelCanvas" width="800" height="600"></canvas></div>
+  </div>
+</div>
+
+<!-- GUIDE -->
+<div class="panel" id="panel-guide">
+  <div class="card">
+    <h3>Pharmacovigilance MA — Method Guide</h3>
+    <div class="info-box"><strong>Why safety MA is different:</strong> Adverse events are often rare (<5%), many studies report zero events, and even small risk increases matter for population-level safety. Standard DerSimonian-Laird can fail with sparse data.</div>
+    <table>
+      <tr><td><strong>Peto OR</strong></td><td>Gold standard for rare events (<1%). Unbiased, no zero-cell correction needed. Breaks down when treatment groups are very unbalanced or events are common.</td></tr>
+      <tr><td><strong>Mantel-Haenszel</strong></td><td>Good for rare events. Needs correction for zero cells. More robust than IV methods with sparse data.</td></tr>
+      <tr><td><strong>DL Random Effects</strong></td><td>Standard random-effects. Can be biased with rare events. Use with caution for safety data.</td></tr>
+      <tr><td><strong>Zero-cell handling</strong></td><td>Add 0.5 is traditional but biases OR→1. Reciprocal and empirical (Sweeting) corrections are less biased. Double-zero studies are uninformative for OR.</td></tr>
+      <tr><td><strong>Sequential monitoring</strong></td><td>O'Brien-Fleming boundaries detect safety signals early without inflating type I error. Critical for post-marketing surveillance.</td></tr>
+    </table>
+  </div>
+</div>
+
+<footer>SafetyMA v1.0 — Mahmood Ahmad, Tahir Heart Institute — Offline-first, no data leaves your browser</footer>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// STATISTICAL CORE
+// ═══════════════════════════════════════════
+function normalCDF(z){const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;const s=z<0?-1:1;const x=Math.abs(z)/Math.sqrt(2);const t=1/(1+p*x);const y=1-(((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);return 0.5*(1+s*y)}
+function normalQuantile(p){if(p<=0)return-Infinity;if(p>=1)return Infinity;if(p===0.5)return 0;const a=p<0.5?p:1-p;const t=Math.sqrt(-2*Math.log(a));const c0=2.515517,c1=0.802853,c2=0.010328,d1=1.432788,d2=0.189269,d3=0.001308;let z=t-(c0+c1*t+c2*t*t)/(1+d1*t+d2*t*t+d3*t*t*t);if(p<0.5)z=-z;return z}
+function chiSqP(x,df){if(x<=0)return 1;return 1-regGammaP(df/2,x/2)}
+function regGammaP(a,x){if(x<=0)return 0;const lga=lgamma(a);if(x<a+1){let s=1/a,t=1/a;for(let n=1;n<200;n++){t*=x/(a+n);s+=t;if(Math.abs(t)<1e-12*Math.abs(s))break}return s*Math.exp(-x+a*Math.log(x)-lga)}else{let f=1,b2=x+1-a,c2=1/1e-30,d2=1/b2;f=d2;for(let i=1;i<=200;i++){const an=-i*(i-a),bn=x+2*i+1-a;d2=bn+an*d2;if(Math.abs(d2)<1e-30)d2=1e-30;d2=1/d2;c2=bn+an/c2;if(Math.abs(c2)<1e-30)c2=1e-30;f*=d2*c2;if(Math.abs(d2*c2-1)<1e-10)break}return 1-f*Math.exp(-x+a*Math.log(x)-lga)}}
+function lgamma(x){const g=7,c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];if(x<0.5)return Math.log(Math.PI/Math.sin(Math.PI*x))-lgamma(1-x);x-=1;let a=c[0];const t=x+g+0.5;for(let i=1;i<g+2;i++)a+=c[i]/(x+i);return 0.5*Math.log(2*Math.PI)+(x+0.5)*Math.log(t)-t+Math.log(a)}
+
+function parseData(){
+  const raw=document.getElementById('dataInput').value.trim();
+  if(!raw)return null;
+  const lines=raw.split('\n').filter(l=>l.trim());
+  const data=[];
+  for(const line of lines){
+    const p=line.trim().split(/[\t,]+/);
+    if(p.length<5)continue;
+    const name=p[0].trim();
+    const et=parseInt(p[1]),nt=parseInt(p[2]),ec=parseInt(p[3]),nc=parseInt(p[4]);
+    if(isNaN(et)||isNaN(nt)||isNaN(ec)||isNaN(nc))continue;
+    if(nt<=0||nc<=0)continue;
+    data.push({name,et,nt,ec,nc});
+  }
+  return data.length>=2?data:null;
+}
+
+function classifyStudy(d){
+  if(d.et===0&&d.ec===0)return 'double-zero';
+  if(d.et===0||d.ec===0||(d.nt-d.et)===0||(d.nc-d.ec)===0)return 'single-zero';
+  return 'normal';
+}
+
+function applyCorrection(data){
+  const method=document.getElementById('zcCorrection').value;
+  const dz=document.getElementById('doubleZero').value;
+  return data.map(d=>{
+    const cls=classifyStudy(d);
+    if(cls==='double-zero'&&dz==='exclude')return{...d,excluded:true,cls};
+    if(cls==='normal')return{...d,et2:d.et,nt2:d.nt,ec2:d.ec,nc2:d.nc,cc:0,excluded:false,cls};
+    // Apply correction
+    let cc=0;
+    if(method==='none'){
+      if(cls==='single-zero')return{...d,excluded:true,cls};
+      return{...d,excluded:true,cls};
+    }
+    if(method==='0.5')cc=0.5;
+    else if(method==='reciprocal'){
+      const R=d.nt/(d.nt+d.nc);
+      cc=R;// reciprocal of arm size ratio
+    }
+    else if(method==='empirical'){
+      // Sweeting: cc proportional to opposite arm event rate
+      const totalE=d.et+d.ec;
+      cc=totalE>0?1/(d.nt+d.nc):0.5;
+    }
+    if(cls==='double-zero'&&dz==='include'){
+      return{...d,et2:d.et+cc,nt2:d.nt+2*cc,ec2:d.ec+cc,nc2:d.nc+2*cc,cc,excluded:false,cls};
+    }
+    // Single-zero: add correction only if at least one cell is zero
+    const needsCC=(d.et===0||d.ec===0||(d.nt-d.et)===0||(d.nc-d.ec)===0);
+    if(needsCC){
+      return{...d,et2:d.et+cc,nt2:d.nt+2*cc,ec2:d.ec+cc,nc2:d.nc+2*cc,cc,excluded:false,cls};
+    }
+    return{...d,et2:d.et,nt2:d.nt,ec2:d.ec,nc2:d.nc,cc:0,excluded:false,cls};
+  });
+}
+
+// Peto OR — no zero-cell correction needed
+function petoOR(data){
+  const studies=data.filter(d=>!d.excluded&&(d.et+d.ec)>0);
+  if(studies.length===0)return null;
+  let sumOE=0,sumV=0;
+  for(const d of studies){
+    const n=d.nt+d.nc;
+    const E=d.et+d.ec;
+    const expected=E*d.nt/n;
+    const O_E=d.et-expected;
+    const V=E*(n-E)*d.nt*d.nc/(n*n*(n-1));
+    if(V>0){sumOE+=O_E;sumV+=V;}
+  }
+  if(sumV===0)return null;
+  const logOR=sumOE/sumV;
+  const se=1/Math.sqrt(sumV);
+  const OR=Math.exp(logOR);
+  const z=logOR/se;
+  const p=2*(1-normalCDF(Math.abs(z)));
+  const alpha=parseFloat(document.getElementById('alpha').value)||0.05;
+  const zc=normalQuantile(1-alpha/2);
+  return{method:'Peto OR',OR,logOR,se,ci:[Math.exp(logOR-zc*se),Math.exp(logOR+zc*se)],p,k:studies.length};
+}
+
+// Mantel-Haenszel OR
+function mhOR(data){
+  const studies=data.filter(d=>!d.excluded);
+  if(studies.length===0)return null;
+  let sumR=0,sumS=0,sumRS=0,sumR2S=0,sumS2R=0,sumRS2=0;
+  for(const d of studies){
+    const a=d.et2||d.et,b=(d.nt2||d.nt)-a,c=d.ec2||d.ec,dd=(d.nc2||d.nc)-c;
+    const n=a+b+c+dd;
+    if(n===0)continue;
+    const R=a*dd/n;
+    const S=b*c/n;
+    sumR+=R;sumS+=S;
+    // Robins-Breslow-Greenland variance
+    const P=(a+dd)/n,Q=(b+c)/n;
+    sumRS+=((a+dd)*a*dd/n+(b+c)*b*c/n)/(n);
+    sumR2S+=(P*R);
+    sumS2R+=(Q*S);
+    sumRS2+=(P*S+Q*R);
+  }
+  if(sumS===0)return null;
+  const OR=sumR/sumS;
+  const logOR=Math.log(OR);
+  // RBG variance
+  const V=sumRS/(2*sumR*sumR)+sumRS2/(2*sumR*sumS)+sumR2S/(2*sumS*sumS);
+  // Simpler Greenland-Robins variance
+  const se=Math.sqrt(V);
+  const z=logOR/se;
+  const p=2*(1-normalCDF(Math.abs(z)));
+  const alpha=parseFloat(document.getElementById('alpha').value)||0.05;
+  const zc=normalQuantile(1-alpha/2);
+
+  // Cochran Q for heterogeneity
+  let Q=0;
+  for(const d of studies){
+    const a=d.et2||d.et,b=(d.nt2||d.nt)-a,c=d.ec2||d.ec,dd2=(d.nc2||d.nc)-c;
+    if(a*dd2===0&&b*c===0)continue;
+    const or_i=(a*dd2)/(b*c||1e-10);
+    const logOR_i=Math.log(or_i||1e-10);
+    const v_i=1/a+1/Math.max(b,0.01)+1/Math.max(c,0.01)+1/Math.max(dd2,0.01);
+    Q+=(logOR_i-logOR)*(logOR_i-logOR)/v_i;
+  }
+  const df=studies.length-1;
+  const Qp=chiSqP(Q,df);
+  const I2=Math.max(0,(Q-df)/Q)*100;
+
+  return{method:'Mantel-Haenszel OR',OR,logOR,se,ci:[Math.exp(logOR-zc*se),Math.exp(logOR+zc*se)],p,k:studies.length,Q,Qp,I2};
+}
+
+// DerSimonian-Laird random effects (log OR scale)
+function dlRE(data){
+  const studies=data.filter(d=>!d.excluded);
+  const ors=[];
+  for(const d of studies){
+    const a=d.et2||d.et,b=(d.nt2||d.nt)-a,c=d.ec2||d.ec,dd=(d.nc2||d.nc)-c;
+    if(a<=0||b<=0||c<=0||dd<=0)continue;
+    const logOR=Math.log((a*dd)/(b*c));
+    const v=1/a+1/b+1/c+1/dd;
+    ors.push({logOR,v,name:d.name});
+  }
+  if(ors.length<2)return null;
+
+  // Fixed-effect first
+  let sumW=0,sumWY=0;
+  for(const o of ors){const w=1/o.v;sumW+=w;sumWY+=w*o.logOR}
+  const fe=sumWY/sumW;
+
+  let Q=0;
+  for(const o of ors){const w=1/o.v;Q+=w*(o.logOR-fe)*(o.logOR-fe)}
+  const df=ors.length-1;
+  const Qp=chiSqP(Q,df);
+
+  let sumW2=0;
+  for(const o of ors)sumW2+=(1/o.v)*(1/o.v);
+  const C=sumW-sumW2/sumW;
+  const tau2=Math.max(0,(Q-df)/C);
+
+  let sumWre=0,sumWreY=0;
+  for(const o of ors){const w=1/(o.v+tau2);sumWre+=w;sumWreY+=w*o.logOR}
+  const beta=sumWreY/sumWre;
+  const se=1/Math.sqrt(sumWre);
+  const OR=Math.exp(beta);
+  const z=beta/se;
+  const p=2*(1-normalCDF(Math.abs(z)));
+  const alpha=parseFloat(document.getElementById('alpha').value)||0.05;
+  const zc=normalQuantile(1-alpha/2);
+  const I2=Math.max(0,(Q-df)/Q)*100;
+
+  return{method:'DL Random Effects',OR,logOR:beta,se,ci:[Math.exp(beta-zc*se),Math.exp(beta+zc*se)],p,k:ors.length,Q,Qp,I2,tau2};
+}
+
+// Cumulative Peto OR (for sequential monitoring)
+function cumulativePeto(data){
+  const studies=data.filter(d=>!d.excluded&&(d.et+d.ec)>0);
+  const results=[];
+  const K=studies.length;
+  const alpha=parseFloat(document.getElementById('alpha').value)||0.05;
+
+  for(let i=0;i<K;i++){
+    const subset=studies.slice(0,i+1);
+    let sumOE=0,sumV=0;
+    for(const d of subset){
+      const n=d.nt+d.nc;const E=d.et+d.ec;
+      const expected=E*d.nt/n;
+      const V=E*(n-E)*d.nt*d.nc/(n*n*(n-1));
+      if(V>0){sumOE+=(d.et-expected);sumV+=V}
+    }
+    if(sumV===0)continue;
+    const logOR=sumOE/sumV;
+    const se=1/Math.sqrt(sumV);
+    const OR=Math.exp(logOR);
+    const z=logOR/se;
+    const p=2*(1-normalCDF(Math.abs(z)));
+    const zc=normalQuantile(1-alpha/2);
+    // O'Brien-Fleming boundary: z_alpha / sqrt(t_k) where t_k = (i+1)/K
+    const t_k=(i+1)/K;
+    const obf=normalQuantile(1-alpha/2)/Math.sqrt(t_k);
+    const signal=Math.abs(z)>=obf;
+
+    results.push({
+      study:studies[i].name,OR,logOR,se,z,p,
+      ci:[Math.exp(logOR-zc*se),Math.exp(logOR+zc*se)],
+      obf,signal,k:i+1
+    });
+  }
+  return results;
+}
+
+// ═══════════════════════════════════════════
+// ANALYSIS RUNNER
+// ═══════════════════════════════════════════
+let lastResults=null;
+
+function runAnalysis(){
+  const raw=parseData();
+  if(!raw){alert('Need at least 2 studies (study, events_trt, n_trt, events_ctrl, n_ctrl).');return}
+  const data=applyCorrection(raw);
+  const peto=petoOR(data);
+  const mh=mhOR(data);
+  const dl=dlRE(data);
+  const cumul=cumulativePeto(data);
+  lastResults={data,raw,peto,mh,dl,cumul};
+  renderResults();renderForest();renderLabbe();renderCumulative();renderFunnel();
+  showTab('results');
+}
+
+function renderResults(){
+  const r=lastResults;
+  const dz=r.data.filter(d=>d.cls==='double-zero').length;
+  const sz=r.data.filter(d=>d.cls==='single-zero').length;
+  const exc=r.data.filter(d=>d.excluded).length;
+  const totalE_trt=r.raw.reduce((s,d)=>s+d.et,0);
+  const totalN_trt=r.raw.reduce((s,d)=>s+d.nt,0);
+  const totalE_ctrl=r.raw.reduce((s,d)=>s+d.ec,0);
+  const totalN_ctrl=r.raw.reduce((s,d)=>s+d.nc,0);
+
+  document.getElementById('summaryStats').innerHTML=`
+    <div class="stat-box"><div class="value">${r.raw.length}</div><div class="label">Total Studies</div></div>
+    <div class="stat-box"><div class="value">${exc}</div><div class="label">Excluded</div></div>
+    <div class="stat-box"><div class="value">${dz}/${sz}</div><div class="label">Double-zero / Single-zero</div></div>
+    <div class="stat-box"><div class="value">${totalE_trt}/${totalN_trt}</div><div class="label">Events/N (Treatment)</div></div>
+    <div class="stat-box"><div class="value">${totalE_ctrl}/${totalN_ctrl}</div><div class="label">Events/N (Control)</div></div>
+    <div class="stat-box"><div class="value">${r.peto?r.peto.OR.toFixed(2):'N/A'}</div><div class="label">Peto OR</div></div>
+  `;
+
+  const methods=[r.peto,r.mh,r.dl].filter(Boolean);
+  document.querySelector('#methodTable tbody').innerHTML=methods.map(m=>{
+    const sig=m.p<0.05;
+    return`<tr><td><strong>${m.method}</strong></td><td>${m.OR.toFixed(3)}</td><td>${m.ci[0].toFixed(3)} – ${m.ci[1].toFixed(3)}</td><td>${m.p<0.001?m.p.toExponential(2):m.p.toFixed(4)}</td><td>${m.k}</td><td>${sig?'<span class="badge badge-red">Signal</span>':'<span class="badge badge-green">No signal</span>'}</td></tr>`;
+  }).join('');
+
+  const hets=[r.mh,r.dl].filter(m=>m&&m.Q!==undefined);
+  document.querySelector('#hetTable tbody').innerHTML=hets.map(m=>`<tr><td>${m.method}</td><td>${m.Q.toFixed(2)}</td><td>${m.k-1}</td><td>${m.Qp.toFixed(4)}</td><td>${m.I2.toFixed(1)}%</td><td>${m.tau2!==undefined?m.tau2.toFixed(4):'—'}</td></tr>`).join('');
+
+  document.getElementById('zeroCellSummary').innerHTML=`<p>Double-zero studies: <strong>${dz}</strong> ${dz>0?'('+document.getElementById('doubleZero').value+')':''} | Single-zero: <strong>${sz}</strong> | Correction: <strong>${document.getElementById('zcCorrection').value}</strong></p>`;
+
+  // Study table
+  const included=r.data.filter(d=>!d.excluded);
+  const totalMHW=included.reduce((s,d)=>{
+    const a=d.et2||d.et,dd2=(d.nc2||d.nc)-(d.ec2||d.ec);
+    const n=(d.nt2||d.nt)+(d.nc2||d.nc);
+    return s+a*dd2/n;
+  },0);
+  document.querySelector('#studyTable tbody').innerHTML=r.data.map(d=>{
+    const a=d.et2||d.et,b=(d.nt2||d.nt)-a,c=d.ec2||d.ec,dd=(d.nc2||d.nc)-c;
+    let or='—',ci='—',wt='—';
+    if(!d.excluded&&a>0&&b>0&&c>0&&dd>0){
+      or=((a*dd)/(b*c)).toFixed(3);
+      const lnor=Math.log((a*dd)/(b*c));
+      const se=Math.sqrt(1/a+1/b+1/c+1/dd);
+      ci=`${Math.exp(lnor-1.96*se).toFixed(3)} – ${Math.exp(lnor+1.96*se).toFixed(3)}`;
+      const n=(d.nt2||d.nt)+(d.nc2||d.nc);
+      wt=totalMHW>0?((a*dd/n)/totalMHW*100).toFixed(1)+'%':'—';
+    }
+    const flag=d.excluded?'<span class="badge badge-amber">Excluded</span>':d.cls==='single-zero'?'<span class="badge badge-amber">Zero-cell</span>':d.cls==='double-zero'?'<span class="badge badge-red">Double-zero</span>':'';
+    return`<tr><td>${d.name}</td><td>${d.et}</td><td>${d.nt}</td><td>${d.ec}</td><td>${d.nc}</td><td>${or}</td><td>${ci}</td><td>${wt}</td><td>${flag}</td></tr>`;
+  }).join('');
+}
+
+function renderForest(){
+  const canvas=document.getElementById('forestCanvas');
+  const r=lastResults;
+  const studies=r.data.filter(d=>!d.excluded);
+  const rows=studies.length+3;
+  canvas.height=Math.max(400,rows*28+100);
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const pad={top:40,right:120,bottom:40,left:200};
+  const pw=W-pad.left-pad.right;
+
+  // Compute study ORs on log scale
+  const ors=[];
+  for(const d of studies){
+    const a=d.et2||d.et,b=(d.nt2||d.nt)-a,c=d.ec2||d.ec,dd=(d.nc2||d.nc)-c;
+    if(a<=0||b<=0||c<=0||dd<=0){ors.push(null);continue}
+    const logOR=Math.log((a*dd)/(b*c));
+    const se=Math.sqrt(1/a+1/b+1/c+1/dd);
+    ors.push({logOR,se,or:Math.exp(logOR)});
+  }
+
+  const summaries=[r.peto,r.mh,r.dl].filter(Boolean);
+  const allLogOR=[...ors.filter(Boolean).flatMap(o=>[o.logOR-1.96*o.se,o.logOR+1.96*o.se]),...summaries.flatMap(s=>[Math.log(s.ci[0]),Math.log(s.ci[1])])];
+  const logMin=Math.min(...allLogOR,-0.1);
+  const logMax=Math.max(...allLogOR,0.1);
+  const xScale=v=>pad.left+((v-logMin)/(logMax-logMin))*pw;
+  const rowH=24;
+
+  // Null line (OR=1, logOR=0)
+  ctx.strokeStyle='#475569';ctx.lineWidth=1;ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(xScale(0),pad.top);ctx.lineTo(xScale(0),H-pad.bottom);ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Header
+  ctx.fillStyle='#94a3b8';ctx.font='bold 11px sans-serif';ctx.textAlign='left';
+  ctx.fillText('Study',10,pad.top-10);
+  ctx.textAlign='center';ctx.fillText('OR (95% CI)',pad.left+pw/2,pad.top-10);
+
+  studies.forEach((d,i)=>{
+    const y=pad.top+10+i*rowH;
+    const o=ors[i];
+    ctx.fillStyle='#e2e8f0';ctx.font='11px sans-serif';ctx.textAlign='right';
+    ctx.fillText(d.name,pad.left-8,y+4);
+    if(!o)return;
+    const lo=o.logOR-1.96*o.se,hi=o.logOR+1.96*o.se;
+    const color=d.cls==='single-zero'?'#f59e0b':'#ef4444';
+    ctx.strokeStyle=color;ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(xScale(lo),y);ctx.lineTo(xScale(hi),y);ctx.stroke();
+    const sz=Math.max(3,Math.min(8,4+1/(o.se*o.se)*0.5));
+    ctx.fillStyle=color;ctx.fillRect(xScale(o.logOR)-sz/2,y-sz/2,sz,sz);
+    ctx.fillStyle='#94a3b8';ctx.font='10px monospace';ctx.textAlign='left';
+    ctx.fillText(`${o.or.toFixed(2)} [${Math.exp(lo).toFixed(2)}, ${Math.exp(hi).toFixed(2)}]`,W-pad.right+5,y+4);
+  });
+
+  const divY=pad.top+10+studies.length*rowH+8;
+  ctx.strokeStyle='#475569';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(10,divY);ctx.lineTo(W-10,divY);ctx.stroke();
+
+  const colors=['#ef4444','#06b6d4','#6366f1'];
+  summaries.forEach((s,i)=>{
+    const y=divY+20+i*rowH;
+    const lx=xScale(Math.log(s.ci[0])),rx=xScale(Math.log(s.ci[1])),cx=xScale(s.logOR);
+    ctx.beginPath();ctx.moveTo(lx,y);ctx.lineTo(cx,y-6);ctx.lineTo(rx,y);ctx.lineTo(cx,y+6);ctx.closePath();
+    ctx.fillStyle=colors[i];ctx.globalAlpha=0.7;ctx.fill();ctx.globalAlpha=1;
+    ctx.fillStyle=colors[i];ctx.font='bold 11px sans-serif';ctx.textAlign='right';
+    ctx.fillText(s.method,pad.left-8,y+4);
+    ctx.fillStyle='#94a3b8';ctx.font='10px monospace';ctx.textAlign='left';
+    ctx.fillText(`${s.OR.toFixed(2)} [${s.ci[0].toFixed(2)}, ${s.ci[1].toFixed(2)}]`,W-pad.right+5,y+4);
+  });
+
+  // x-axis labels (OR scale)
+  ctx.fillStyle='#64748b';ctx.font='10px sans-serif';ctx.textAlign='center';
+  const ticks=[0.1,0.25,0.5,1,2,4,10].filter(t=>Math.log(t)>=logMin&&Math.log(t)<=logMax);
+  for(const t of ticks){
+    const x=xScale(Math.log(t));
+    ctx.beginPath();ctx.moveTo(x,H-pad.bottom);ctx.lineTo(x,H-pad.bottom+5);ctx.strokeStyle='#475569';ctx.stroke();
+    ctx.fillText(t.toString(),x,H-pad.bottom+18);
+  }
+  ctx.fillText('Favours treatment ←     → Favours control',pad.left+pw/2,H-8);
+}
+
+function renderLabbe(){
+  const canvas=document.getElementById('labbeCanvas');
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const pad={top:40,right:40,bottom:60,left:60};
+  const pw=W-pad.left-pad.right,ph=H-pad.top-pad.bottom;
+
+  const data=lastResults.data.filter(d=>!d.excluded);
+  const ratesT=data.map(d=>d.et/d.nt);
+  const ratesC=data.map(d=>d.ec/d.nc);
+  const maxR=Math.max(...ratesT,...ratesC,0.1)*1.15;
+
+  const xScale=v=>pad.left+(v/maxR)*pw;
+  const yScale=v=>pad.top+ph-(v/maxR)*ph;
+
+  // Diagonal (OR=1)
+  ctx.strokeStyle='#475569';ctx.lineWidth=1;ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(xScale(0),yScale(0));ctx.lineTo(xScale(maxR),yScale(maxR));ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Grid
+  ctx.strokeStyle='#1e293b';ctx.lineWidth=0.5;
+  for(let i=0;i<=5;i++){
+    const v=(maxR/5)*i;
+    ctx.beginPath();ctx.moveTo(xScale(v),pad.top);ctx.lineTo(xScale(v),H-pad.bottom);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(pad.left,yScale(v));ctx.lineTo(W-pad.right,yScale(v));ctx.stroke();
+    ctx.fillStyle='#64748b';ctx.font='10px sans-serif';
+    ctx.textAlign='center';ctx.fillText((v*100).toFixed(0)+'%',xScale(v),H-pad.bottom+15);
+    ctx.textAlign='right';ctx.fillText((v*100).toFixed(0)+'%',pad.left-6,yScale(v)+4);
+  }
+
+  // Points
+  data.forEach((d,i)=>{
+    const x=xScale(d.ec/d.nc),y=yScale(d.et/d.nt);
+    const sz=Math.max(4,Math.min(12,Math.sqrt(d.nt+d.nc)/3));
+    ctx.beginPath();ctx.arc(x,y,sz,0,Math.PI*2);
+    const above=d.et/d.nt>d.ec/d.nc;
+    ctx.fillStyle=above?'rgba(239,68,68,0.6)':'rgba(34,197,94,0.6)';
+    ctx.fill();ctx.strokeStyle=above?'#ef4444':'#22c55e';ctx.lineWidth=1.5;ctx.stroke();
+  });
+
+  ctx.fillStyle='#94a3b8';ctx.font='13px sans-serif';ctx.textAlign='center';
+  ctx.fillText('Control event rate',pad.left+pw/2,H-10);
+  ctx.save();ctx.translate(14,pad.top+ph/2);ctx.rotate(-Math.PI/2);
+  ctx.fillText('Treatment event rate',0,0);ctx.restore();
+}
+
+function renderCumulative(){
+  const canvas=document.getElementById('cumulCanvas');
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const cumul=lastResults.cumul;
+  if(!cumul||cumul.length===0)return;
+
+  const pad={top:40,right:40,bottom:60,left:70};
+  const pw=W-pad.left-pad.right,ph=H-pad.top-pad.bottom;
+
+  const allLogOR=cumul.flatMap(c=>[Math.log(c.ci[0]),Math.log(c.ci[1])]);
+  const logMin=Math.min(...allLogOR,-0.5);
+  const logMax=Math.max(...allLogOR,0.5);
+  const xScale=i=>pad.left+(i/(cumul.length-1||1))*pw;
+  const yScale=v=>pad.top+ph-((v-logMin)/(logMax-logMin))*ph;
+
+  // Null line
+  ctx.strokeStyle='#475569';ctx.lineWidth=1;ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(pad.left,yScale(0));ctx.lineTo(W-pad.right,yScale(0));ctx.stroke();
+  ctx.setLineDash([]);
+
+  // OBF boundaries
+  ctx.strokeStyle='rgba(239,68,68,0.3)';ctx.lineWidth=1.5;ctx.setLineDash([6,3]);
+  cumul.forEach((c,i)=>{
+    if(i===0)ctx.beginPath();
+    const obfLogOR=c.obf*c.se;
+    if(i===0)ctx.moveTo(xScale(i),yScale(obfLogOR));
+    else ctx.lineTo(xScale(i),yScale(obfLogOR));
+  });
+  ctx.stroke();
+  ctx.beginPath();
+  cumul.forEach((c,i)=>{
+    const obfLogOR=-c.obf*c.se;
+    if(i===0)ctx.moveTo(xScale(i),yScale(obfLogOR));
+    else ctx.lineTo(xScale(i),yScale(obfLogOR));
+  });
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // CI ribbon
+  ctx.fillStyle='rgba(239,68,68,0.1)';
+  ctx.beginPath();
+  cumul.forEach((c,i)=>{if(i===0)ctx.moveTo(xScale(i),yScale(Math.log(c.ci[1])));else ctx.lineTo(xScale(i),yScale(Math.log(c.ci[1])))});
+  for(let i=cumul.length-1;i>=0;i--)ctx.lineTo(xScale(i),yScale(Math.log(cumul[i].ci[0])));
+  ctx.closePath();ctx.fill();
+
+  // Estimate line
+  ctx.strokeStyle='#ef4444';ctx.lineWidth=2;
+  ctx.beginPath();
+  cumul.forEach((c,i)=>{if(i===0)ctx.moveTo(xScale(i),yScale(c.logOR));else ctx.lineTo(xScale(i),yScale(c.logOR))});
+  ctx.stroke();
+
+  // Points
+  cumul.forEach((c,i)=>{
+    ctx.beginPath();ctx.arc(xScale(i),yScale(c.logOR),c.signal?7:4,0,Math.PI*2);
+    ctx.fillStyle=c.signal?'#ef4444':'#f87171';ctx.fill();
+    if(c.signal){ctx.strokeStyle='#fca5a5';ctx.lineWidth=2;ctx.stroke()}
+  });
+
+  // X-axis labels
+  ctx.fillStyle='#64748b';ctx.font='9px sans-serif';ctx.textAlign='center';
+  cumul.forEach((c,i)=>{
+    if(cumul.length<=20||i%(Math.ceil(cumul.length/15))===0){
+      ctx.save();ctx.translate(xScale(i),H-pad.bottom+12);ctx.rotate(-Math.PI/4);
+      ctx.fillText(c.study,0,0);ctx.restore();
+    }
+  });
+
+  // Y-axis (log OR scale)
+  ctx.fillStyle='#64748b';ctx.font='10px sans-serif';ctx.textAlign='right';
+  for(let i=0;i<=6;i++){
+    const v=logMin+(logMax-logMin)*(i/6);
+    ctx.fillText(Math.exp(v).toFixed(2),pad.left-8,yScale(v)+4);
+    ctx.strokeStyle='#1e293b';ctx.lineWidth=0.5;
+    ctx.beginPath();ctx.moveTo(pad.left,yScale(v));ctx.lineTo(W-pad.right,yScale(v));ctx.stroke();
+  }
+
+  ctx.fillStyle='#94a3b8';ctx.font='12px sans-serif';ctx.textAlign='center';
+  ctx.fillText('Cumulative Peto OR (log scale)',pad.left+pw/2,pad.top-15);
+
+  // Cumulative table
+  document.querySelector('#cumulTable tbody').innerHTML=cumul.map(c=>`<tr><td>${c.study}</td><td>${c.OR.toFixed(3)}</td><td>${c.ci[0].toFixed(3)} – ${c.ci[1].toFixed(3)}</td><td>${c.z.toFixed(2)}</td><td>±${c.obf.toFixed(2)}</td><td>${c.signal?'<span class="badge badge-red">SIGNAL</span>':'<span class="badge badge-green">No</span>'}</td></tr>`).join('');
+}
+
+function renderFunnel(){
+  const canvas=document.getElementById('funnelCanvas');
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const r=lastResults;
+  const studies=r.data.filter(d=>!d.excluded);
+  const pad={top:40,right:40,bottom:60,left:70};
+  const pw=W-pad.left-pad.right,ph=H-pad.top-pad.bottom;
+
+  const ors=[];
+  for(const d of studies){
+    const a=d.et2||d.et,b=(d.nt2||d.nt)-a,c=d.ec2||d.ec,dd=(d.nc2||d.nc)-c;
+    if(a<=0||b<=0||c<=0||dd<=0)continue;
+    ors.push({logOR:Math.log((a*dd)/(b*c)),se:Math.sqrt(1/a+1/b+1/c+1/dd)});
+  }
+  if(ors.length<3)return;
+
+  const refLogOR=r.peto?r.peto.logOR:r.mh.logOR;
+  const seMax=Math.max(...ors.map(o=>o.se))*1.2;
+  const lorRange=Math.max(...ors.map(o=>Math.abs(o.logOR-refLogOR)))+1.96*seMax;
+  const lorMin=refLogOR-lorRange,lorMax=refLogOR+lorRange;
+  const xScale=v=>pad.left+((v-lorMin)/(lorMax-lorMin))*pw;
+  const yScale=v=>pad.top+(v/seMax)*ph;
+
+  // Pseudo-CI
+  ctx.fillStyle='rgba(239,68,68,0.06)';
+  ctx.beginPath();ctx.moveTo(xScale(refLogOR),yScale(0));
+  ctx.lineTo(xScale(refLogOR-1.96*seMax),yScale(seMax));
+  ctx.lineTo(xScale(refLogOR+1.96*seMax),yScale(seMax));ctx.closePath();ctx.fill();
+
+  ctx.strokeStyle='#ef4444';ctx.lineWidth=1;ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(xScale(refLogOR),yScale(0));ctx.lineTo(xScale(refLogOR),yScale(seMax));ctx.stroke();
+  ctx.setLineDash([]);
+
+  for(const o of ors){
+    ctx.beginPath();ctx.arc(xScale(o.logOR),yScale(o.se),5,0,Math.PI*2);
+    ctx.fillStyle='#e2e8f0';ctx.fill();ctx.strokeStyle='#94a3b8';ctx.lineWidth=1;ctx.stroke();
+  }
+
+  ctx.fillStyle='#94a3b8';ctx.font='12px sans-serif';ctx.textAlign='center';
+  ctx.fillText('log(OR)',pad.left+pw/2,H-10);
+  ctx.save();ctx.translate(14,pad.top+ph/2);ctx.rotate(-Math.PI/2);ctx.fillText('SE',0,0);ctx.restore();
+}
+
+// ═══════════════════════════════════════════
+// EXAMPLES
+// ═══════════════════════════════════════════
+const EXAMPLES={
+  rosiglitazone:{drug:'Rosiglitazone',outcome:'Myocardial infarction',data:`ADOPT\t27\t1456\t21\t1441
+DREAM\t15\t2635\t9\t2634
+Dargie\t4\t110\t3\t114
+Gerstein\t1\t50\t0\t50
+Kahn\t5\t1425\t2\t1425
+Kipnes\t0\t175\t1\t78
+Raskin\t1\t132\t0\t61
+Vongthavaravat\t1\t143\t0\t72
+Bakris\t1\t127\t0\t130
+Nissen-phase2\t0\t99\t0\t100
+Wolski-A\t2\t294\t1\t302
+Wolski-B\t1\t210\t0\t208
+Wolski-C\t3\t330\t0\t166
+Freed\t0\t197\t1\t198
+Lebovitz\t0\t159\t0\t78
+Pavo\t1\t127\t0\t125
+Sutton\t0\t195\t0\t198
+Ovalle\t0\t11\t0\t14
+Zhu\t1\t170\t0\t92
+Nesto\t5\t178\t1\t96
+Goldberg\t2\t112\t0\t109
+Stocker\t2\t157\t0\t150
+Hanefeld\t4\t341\t1\t172
+Phillips\t1\t174\t0\t175
+Barnett\t1\t105\t0\t106
+Charbonnel\t1\t318\t0\t313
+Fonseca\t0\t197\t0\t108
+Giles\t2\t103\t0\t104
+Sarafidis\t0\t28\t0\t29
+Pomidossi\t0\t30\t0\t30
+Negro\t0\t30\t0\t30
+Basu\t1\t50\t0\t50
+Yki-Jarvinen\t0\t97\t0\t96
+Garber\t1\t222\t0\t225
+Diamant\t0\t150\t0\t145
+Weissman\t0\t40\t0\t39
+Winkler\t0\t22\t0\t22
+Kokkoris\t0\t25\t0\t25
+Hällsten\t0\t10\t0\t10
+Bibra\t0\t10\t0\t10
+Tan\t0\t110\t0\t115
+Carey\t0\t25\t0\t21`},
+  ssri_suicide:{drug:'SSRIs',outcome:'Suicidal ideation',data:`Study-A\t2\t450\t0\t448
+Study-B\t1\t320\t0\t315
+Study-C\t0\t280\t0\t275
+Study-D\t3\t510\t1\t505
+Study-E\t0\t190\t0\t188
+Study-F\t1\t260\t0\t255
+Study-G\t2\t380\t0\t375
+Study-H\t0\t150\t0\t148
+Study-I\t1\t420\t1\t418
+Study-J\t0\t200\t0\t195`},
+  nsaid_gi:{drug:'NSAIDs',outcome:'GI bleeding',data:`Trial-1\t12\t450\t3\t448
+Trial-2\t8\t320\t2\t315
+Trial-3\t15\t510\t5\t505
+Trial-4\t6\t260\t1\t255
+Trial-5\t9\t380\t3\t375
+Trial-6\t4\t200\t1\t195
+Trial-7\t11\t420\t4\t418
+Trial-8\t7\t290\t2\t285`}
+};
+
+function loadExample(k){
+  const ex=EXAMPLES[k];
+  document.getElementById('drugName').value=ex.drug;
+  document.getElementById('outcomeName').value=ex.outcome;
+  document.getElementById('dataInput').value=ex.data;
+}
+
+// ═══════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════
+function showTab(n){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+n).classList.add('active');
+  document.querySelectorAll('.tab').forEach(t=>{const m=t.getAttribute('onclick')?.match(/showTab\('(\w+)'\)/);if(m&&m[1]===n)t.classList.add('active')});
+}
+function clearAll(){document.getElementById('dataInput').value='';document.getElementById('drugName').value='';document.getElementById('outcomeName').value=''}
+function exportCSV(){
+  if(!lastResults)return;
+  const r=lastResults;
+  let csv='Study,Events_Trt,N_Trt,Events_Ctrl,N_Ctrl,Class,Excluded\n';
+  r.data.forEach(d=>csv+=`${d.name},${d.et},${d.nt},${d.ec},${d.nc},${d.cls},${d.excluded}\n`);
+  csv+='\nMethod,OR,CI_lower,CI_upper,P\n';
+  [r.peto,r.mh,r.dl].filter(Boolean).forEach(m=>csv+=`${m.method},${m.OR},${m.ci[0]},${m.ci[1]},${m.p}\n`);
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='safety_ma_results.csv';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+function exportPlot(id,name){const c=document.getElementById(id);const a=document.createElement('a');a.download=name+'.png';a.href=c.toDataURL();a.click()}
+</script>
+</body>
+</html>
