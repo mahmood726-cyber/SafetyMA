@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SafetyMA — Pharmacovigilance Meta-Analysis</title>
 <meta property="og:title" content="SafetyMA — Drug Safety Meta-Analysis">
-<meta property="og:description" content="Browser-based pharmacovigilance MA: Peto OR, MH, rare events, double-zero handling, sequential safety monitoring.">
+<meta property="og:description" content="Browser-based pharmacovigilance MA: Peto OR, MH, DL, arcsine difference, beta-binomial, risk difference/NNH, exact conditional, Peters test, prediction interval.">
 <style>
 :root {
   --bg:#0a0e17;--surface:#131926;--surface2:#1a2236;--border:#2a3450;
@@ -60,7 +60,7 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
 <div class="container">
 <header>
   <h1>SafetyMA</h1>
-  <p>Pharmacovigilance Meta-Analysis — Peto OR, Mantel-Haenszel, rare events, sequential safety monitoring</p>
+  <p>Pharmacovigilance Meta-Analysis — Peto OR, MH, DL, Arcsine Difference, Beta-Binomial, RD/NNH, Exact Tests, Peters' Bias, Prediction Intervals</p>
 </header>
 
 <div class="tabs">
@@ -70,6 +70,7 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
   <div class="tab" onclick="showTab('labbe')">L'Abbe Plot</div>
   <div class="tab" onclick="showTab('cumulative')">Cumulative Safety</div>
   <div class="tab" onclick="showTab('funnel')">Funnel Plot</div>
+  <div class="tab" onclick="showTab('advanced')">Advanced</div>
   <div class="tab" onclick="showTab('guide')">Guide</div>
 </div>
 
@@ -181,6 +182,45 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
   </div>
 </div>
 
+<!-- ADVANCED -->
+<div class="panel" id="panel-advanced">
+  <div class="card">
+    <h3>Arcsine Difference (Rucker et al. 2009)</h3>
+    <div class="info-box">Variance-stabilizing transformation for rare events. Variance = 1/(4n_t) + 1/(4n_c) -- does NOT depend on event rate. No zero-cell correction needed.</div>
+    <div class="stat-grid" id="advArcsineSummary"></div>
+    <table id="arcsineTable"><thead><tr><th>Study</th><th>AS Diff</th><th>Variance</th><th>Weight (%)</th><th>95% CI</th></tr></thead><tbody></tbody></table>
+  </div>
+  <div class="card">
+    <h3>Risk Difference &amp; Number Needed to Harm</h3>
+    <div class="info-box">Absolute risk measure. NNH = 1/pooled_RD provides direct clinical interpretation of harm magnitude.</div>
+    <div class="stat-grid" id="advRDSummary"></div>
+    <table id="rdTable"><thead><tr><th>Study</th><th>RD</th><th>Variance</th><th>Weight (%)</th><th>95% CI</th></tr></thead><tbody></tbody></table>
+  </div>
+  <div class="card">
+    <h3>Beta-Binomial Model (Kuss 2015)</h3>
+    <div class="info-box">One-stage random effects for rare events. Estimates mu_t, mu_c, phi via maximum likelihood. More appropriate than DL for very sparse data.</div>
+    <div class="stat-grid" id="advBBSummary"></div>
+  </div>
+  <div class="card">
+    <h3>Exact Conditional Tests</h3>
+    <div class="info-box">Exact p-value for MH OR using hypergeometric distribution. Mid-p correction for less conservative inference. Important when normal approximation fails with sparse data.</div>
+    <div class="stat-grid" id="advExactSummary"></div>
+  </div>
+  <div class="card">
+    <h3>Peters' Test for Publication Bias</h3>
+    <div class="info-box">Regression of 1/n_total on effect, weighted by inverse total events. More appropriate than Egger's for binary OR outcomes (Peters et al. 2006).</div>
+    <div class="stat-grid" id="advPetersSummary"></div>
+  </div>
+  <div class="card">
+    <h3>Prediction Interval</h3>
+    <div class="info-box">The prediction interval estimates the range of true effects in a new study. Uses t_{k-2} distribution, NOT t_{k-1}. Undefined for k &lt; 3.</div>
+    <div class="stat-grid" id="advPISummary"></div>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-secondary btn-sm" onclick="exportAdvancedCSV()">Export Advanced CSV</button>
+  </div>
+</div>
+
 <!-- GUIDE -->
 <div class="panel" id="panel-guide">
   <div class="card">
@@ -192,11 +232,17 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
       <tr><td><strong>DL Random Effects</strong></td><td>Standard random-effects. Can be biased with rare events. Use with caution for safety data.</td></tr>
       <tr><td><strong>Zero-cell handling</strong></td><td>Add 0.5 is traditional but biases OR→1. Reciprocal and empirical (Sweeting) corrections are less biased. Double-zero studies are uninformative for OR.</td></tr>
       <tr><td><strong>Sequential monitoring</strong></td><td>O'Brien-Fleming boundaries detect safety signals early without inflating type I error. Critical for post-marketing surveillance.</td></tr>
+      <tr><td><strong>Arcsine Difference</strong></td><td>Rucker et al. 2009. Variance-stabilizing transform: arcsin(sqrt(e/n)). Variance = 1/(4n) -- independent of event rate. No zero-cell correction needed. Superior to Peto for very rare events.</td></tr>
+      <tr><td><strong>Risk Difference / NNH</strong></td><td>Absolute risk measure. RD = e_t/n_t - e_c/n_c. NNH = 1/RD gives the number of patients treated per additional harm event. Essential for clinical interpretation.</td></tr>
+      <tr><td><strong>Beta-Binomial model</strong></td><td>Kuss 2015. One-stage random effects using beta-binomial likelihood. Avoids continuity corrections entirely. More appropriate than DL for very sparse 2x2 tables.</td></tr>
+      <tr><td><strong>Exact Conditional Test</strong></td><td>Mehta-Patel / Conditional MH. Uses hypergeometric distribution for exact p-value. Mid-p correction available for less conservative inference.</td></tr>
+      <tr><td><strong>Peters' Test</strong></td><td>Peters et al. 2006. Publication bias test for binary outcomes. Regresses 1/n on effect, weighted by inverse total events. Less affected by OR-SE correlation than Egger's.</td></tr>
+      <tr><td><strong>Prediction Interval</strong></td><td>Range of true effects expected in a new study. Uses t_{k-2} (NOT t_{k-1}). Wider than CI -- reflects between-study heterogeneity.</td></tr>
     </table>
   </div>
 </div>
 
-<footer>SafetyMA v1.0 — Mahmood Ahmad, Tahir Heart Institute — Offline-first, no data leaves your browser</footer>
+<footer>SafetyMA v2.0 — Mahmood Ahmad, Tahir Heart Institute — Offline-first, no data leaves your browser — Arcsine Diff, RD/NNH, Beta-Binomial, Exact MH, Peters', Prediction Interval</footer>
 </div>
 
 <script>
@@ -432,7 +478,7 @@ function runAnalysis(){
   const dl=dlRE(data);
   const cumul=cumulativePeto(data);
   lastResults={data,raw,peto,mh,dl,cumul};
-  renderResults();renderForest();renderLabbe();renderCumulative();renderFunnel();
+  renderResults();renderForest();renderLabbe();renderCumulative();renderFunnel();renderAdvanced();
   showTab('results');
 }
 
@@ -749,6 +795,691 @@ function renderFunnel(){
 }
 
 // ═══════════════════════════════════════════
+// ADVANCED METHODS
+// ═══════════════════════════════════════════
+
+// t-distribution quantile (Hill 1970 inverse algorithm + Abramowitz-Stegun approx)
+function tQuantile(p, df) {
+  if (df <= 0) return NaN;
+  if (df === Infinity) return normalQuantile(p);
+  if (p <= 0) return -Infinity;
+  if (p >= 1) return Infinity;
+  if (p === 0.5) return 0;
+  // Use normal approximation adjusted for df
+  const z = normalQuantile(p);
+  // Cornish-Fisher expansion for small df correction
+  const g1 = (z * z * z + z) / (4 * df);
+  const g2 = (5 * z * z * z * z * z + 16 * z * z * z + 3 * z) / (96 * df * df);
+  let t = z + g1 + g2;
+  // Newton-Raphson refinement using incomplete beta
+  for (let iter = 0; iter < 15; iter++) {
+    const cdf = tCDF(t, df);
+    const pdf = tPDF(t, df);
+    if (pdf < 1e-30) break;
+    const delta = (cdf - p) / pdf;
+    t -= delta;
+    if (Math.abs(delta) < 1e-12) break;
+  }
+  return t;
+}
+function tPDF(t, df) {
+  const lcoeff = lgamma((df + 1) / 2) - lgamma(df / 2) - 0.5 * Math.log(df * Math.PI);
+  return Math.exp(lcoeff - ((df + 1) / 2) * Math.log(1 + t * t / df));
+}
+function tCDF(t, df) {
+  if (df <= 0) return NaN;
+  const x = df / (df + t * t);
+  const ib = regBetaI(df / 2, 0.5, x);
+  return t >= 0 ? 1 - 0.5 * ib : 0.5 * ib;
+}
+function regBetaI(a, b, x) {
+  // Regularized incomplete beta via continued fraction (Lentz)
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const lbeta = lgamma(a) + lgamma(b) - lgamma(a + b);
+  const front = Math.exp(a * Math.log(x) + b * Math.log(1 - x) - lbeta);
+  if (x < (a + 1) / (a + b + 2)) {
+    return front * betaCF(a, b, x) / a;
+  } else {
+    return 1 - front * betaCF(b, a, 1 - x) / b;
+  }
+}
+function betaCF(a, b, x) {
+  const maxIter = 200;
+  let qab = a + b, qap = a + 1, qam = a - 1;
+  let c = 1, d = 1 - qab * x / qap;
+  if (Math.abs(d) < 1e-30) d = 1e-30;
+  d = 1 / d;
+  let h = d;
+  for (let m = 1; m <= maxIter; m++) {
+    let m2 = 2 * m;
+    let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+    d = 1 + aa * d; if (Math.abs(d) < 1e-30) d = 1e-30; d = 1 / d;
+    c = 1 + aa / c; if (Math.abs(c) < 1e-30) c = 1e-30;
+    h *= d * c;
+    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+    d = 1 + aa * d; if (Math.abs(d) < 1e-30) d = 1e-30; d = 1 / d;
+    c = 1 + aa / c; if (Math.abs(c) < 1e-30) c = 1e-30;
+    let del = d * c;
+    h *= del;
+    if (Math.abs(del - 1) < 1e-12) break;
+  }
+  return h;
+}
+
+// 1. Arcsine Difference (Rucker et al. 2009, Stat Med)
+function arcsineDiff(data) {
+  const studies = data.filter(d => !d.excluded);
+  if (studies.length < 2) return null;
+  const items = [];
+  let sumW = 0, sumWY = 0;
+  for (const d of studies) {
+    const asd = Math.asin(Math.sqrt(d.et / d.nt)) - Math.asin(Math.sqrt(d.ec / d.nc));
+    const v = 1 / (4 * d.nt) + 1 / (4 * d.nc);
+    const w = 1 / v;
+    sumW += w;
+    sumWY += w * asd;
+    items.push({ name: d.name, asd, v, w });
+  }
+  const pooledASD = sumWY / sumW;
+  const seFE = 1 / Math.sqrt(sumW);
+
+  // Cochran Q and DL tau2
+  let Q = 0;
+  for (const it of items) Q += it.w * (it.asd - pooledASD) * (it.asd - pooledASD);
+  const df = items.length - 1;
+  const Qp = chiSqP(Q, df);
+  let sumW2 = 0;
+  for (const it of items) sumW2 += it.w * it.w;
+  const C = sumW - sumW2 / sumW;
+  const tau2 = Math.max(0, (Q - df) / C);
+
+  // RE pooled
+  let sumWre = 0, sumWreY = 0;
+  for (const it of items) { const w = 1 / (it.v + tau2); sumWre += w; sumWreY += w * it.asd; it.wRE = w; }
+  const pooledRE = sumWreY / sumWre;
+  const seRE = 1 / Math.sqrt(sumWre);
+
+  const alpha = parseFloat(document.getElementById('alpha').value) || 0.05;
+  const zc = normalQuantile(1 - alpha / 2);
+
+  // Back-transform: approximate OR from arcsine difference
+  // sin(asd) ~ RD when rates small; OR approx via exp(pi/sqrt(3) * asd) [Rucker conversion]
+  const piSqrt3 = Math.PI / Math.sqrt(3); // ~ 1.8138
+  const orRE = Math.exp(piSqrt3 * pooledRE);
+  const orCIlo = Math.exp(piSqrt3 * (pooledRE - zc * seRE));
+  const orCIhi = Math.exp(piSqrt3 * (pooledRE + zc * seRE));
+
+  const z = pooledRE / seRE;
+  const p = 2 * (1 - normalCDF(Math.abs(z)));
+  const I2 = Q > df ? ((Q - df) / Q) * 100 : 0;
+
+  // Assign weights
+  const totalWRE = sumWre;
+  for (const it of items) it.wtPct = (it.wRE / totalWRE) * 100;
+
+  return {
+    method: 'Arcsine Diff (RE)', pooledASD: pooledRE, se: seRE,
+    ci: [pooledRE - zc * seRE, pooledRE + zc * seRE],
+    OR: orRE, orCI: [orCIlo, orCIhi],
+    p, k: items.length, Q, Qp, I2, tau2, items
+  };
+}
+
+// 2. Risk Difference pooling (inverse-variance RE)
+function riskDifference(data) {
+  const studies = data.filter(d => !d.excluded);
+  if (studies.length < 2) return null;
+  const items = [];
+  let sumW = 0, sumWY = 0;
+  for (const d of studies) {
+    const rd = d.et / d.nt - d.ec / d.nc;
+    // Variance of RD: et*(nt-et)/nt^3 + ec*(nc-ec)/nc^3
+    const v = (d.et * (d.nt - d.et)) / (d.nt * d.nt * d.nt) +
+              (d.ec * (d.nc - d.ec)) / (d.nc * d.nc * d.nc);
+    // If v=0 (both zero events or all events), use approximate variance
+    const vSafe = v > 0 ? v : 1 / (4 * d.nt) + 1 / (4 * d.nc);
+    const w = 1 / vSafe;
+    sumW += w;
+    sumWY += w * rd;
+    items.push({ name: d.name, rd, v: vSafe, w, vOrig: v });
+  }
+  const pooledFE = sumWY / sumW;
+
+  // Cochran Q and DL tau2
+  let Q = 0;
+  for (const it of items) Q += it.w * (it.rd - pooledFE) * (it.rd - pooledFE);
+  const df = items.length - 1;
+  const Qp = chiSqP(Q, df);
+  let sumW2 = 0;
+  for (const it of items) sumW2 += it.w * it.w;
+  const C = sumW - sumW2 / sumW;
+  const tau2 = Math.max(0, (Q - df) / C);
+
+  // RE pooled
+  let sumWre = 0, sumWreY = 0;
+  for (const it of items) { const w = 1 / (it.v + tau2); sumWre += w; sumWreY += w * it.rd; it.wRE = w; }
+  const pooledRE = sumWreY / sumWre;
+  const seRE = 1 / Math.sqrt(sumWre);
+
+  const alpha = parseFloat(document.getElementById('alpha').value) || 0.05;
+  const zc = normalQuantile(1 - alpha / 2);
+  const z = pooledRE / seRE;
+  const p = 2 * (1 - normalCDF(Math.abs(z)));
+  const I2 = Q > df ? ((Q - df) / Q) * 100 : 0;
+
+  // NNH
+  const nnh = pooledRE !== 0 ? 1 / pooledRE : Infinity;
+  const nnh_ci_lo = (pooledRE + zc * seRE) !== 0 ? 1 / (pooledRE + zc * seRE) : Infinity;
+  const nnh_ci_hi = (pooledRE - zc * seRE) !== 0 ? 1 / (pooledRE - zc * seRE) : Infinity;
+  // Sort NNH CI so lower bound < upper bound
+  const nnh_ci = [Math.min(nnh_ci_lo, nnh_ci_hi), Math.max(nnh_ci_lo, nnh_ci_hi)];
+
+  const totalWRE = sumWre;
+  for (const it of items) it.wtPct = (it.wRE / totalWRE) * 100;
+
+  return {
+    method: 'Risk Difference (RE)', pooledRD: pooledRE, se: seRE,
+    ci: [pooledRE - zc * seRE, pooledRE + zc * seRE],
+    p, k: items.length, Q, Qp, I2, tau2, items,
+    nnh, nnh_ci
+  };
+}
+
+// 3. Beta-Binomial model (Kuss 2015)
+function betaBinomial(data) {
+  const studies = data.filter(d => !d.excluded);
+  if (studies.length < 2) return null;
+
+  // Log-likelihood: sum( log C(n,e) + logBeta(e+a, n-e+b) - logBeta(a,b) ) for each arm
+  function logLik(params) {
+    const [logitMuT, logitMuC, logPhi] = params;
+    const muT = 1 / (1 + Math.exp(-logitMuT));
+    const muC = 1 / (1 + Math.exp(-logitMuC));
+    const phi = Math.exp(logPhi);
+    if (phi <= 0 || muT <= 0 || muT >= 1 || muC <= 0 || muC >= 1) return -Infinity;
+
+    let ll = 0;
+    for (const d of studies) {
+      const aT = muT * phi, bT = (1 - muT) * phi;
+      const aC = muC * phi, bC = (1 - muC) * phi;
+      // Treatment arm: logBeta(et+aT, nt-et+bT) - logBeta(aT, bT)
+      ll += lbeta(d.et + aT, d.nt - d.et + bT) - lbeta(aT, bT);
+      // Control arm: logBeta(ec+aC, nc-ec+bC) - logBeta(aC, bC)
+      ll += lbeta(d.ec + aC, d.nc - d.ec + bC) - lbeta(aC, bC);
+    }
+    return ll;
+  }
+
+  function lbeta(a, b) {
+    if (a <= 0 || b <= 0) return -Infinity;
+    return lgamma(a) + lgamma(b) - lgamma(a + b);
+  }
+
+  // Nelder-Mead simplex optimization
+  function nelderMead(fn, x0, maxIter) {
+    const n = x0.length;
+    const alpha2 = 1, gamma = 2, rho = 0.5, sigma = 0.5;
+    maxIter = maxIter || 2000;
+    // Initialize simplex
+    let simplex = [{ x: x0.slice(), f: -fn(x0) }];
+    for (let i = 0; i < n; i++) {
+      const xi = x0.slice();
+      xi[i] += (Math.abs(xi[i]) > 0.1 ? 0.5 * Math.abs(xi[i]) : 0.5);
+      simplex.push({ x: xi, f: -fn(xi) });
+    }
+    for (let iter = 0; iter < maxIter; iter++) {
+      simplex.sort((a, b) => a.f - b.f);
+      // Centroid (exclude worst)
+      const centroid = new Array(n).fill(0);
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) centroid[j] += simplex[i].x[j];
+        // intentionally loops i=0..n-1 (excluding last = worst)
+      }
+      for (let j = 0; j < n; j++) centroid[j] /= n;
+      const worst = simplex[n];
+      // Reflection
+      const xr = centroid.map((c, j) => c + alpha2 * (c - worst.x[j]));
+      const fr = -fn(xr);
+      if (fr >= simplex[0].f && fr < simplex[n - 1].f) {
+        simplex[n] = { x: xr, f: fr }; continue;
+      }
+      if (fr < simplex[0].f) {
+        // Expansion
+        const xe = centroid.map((c, j) => c + gamma * (xr[j] - c));
+        const fe = -fn(xe);
+        simplex[n] = fe < fr ? { x: xe, f: fe } : { x: xr, f: fr }; continue;
+      }
+      // Contraction
+      const xc = centroid.map((c, j) => c + rho * (worst.x[j] - c));
+      const fc = -fn(xc);
+      if (fc < worst.f) {
+        simplex[n] = { x: xc, f: fc }; continue;
+      }
+      // Shrink
+      const best = simplex[0];
+      for (let i = 1; i <= n; i++) {
+        for (let j = 0; j < n; j++) simplex[i].x[j] = best.x[j] + sigma * (simplex[i].x[j] - best.x[j]);
+        simplex[i].f = -fn(simplex[i].x);
+      }
+    }
+    simplex.sort((a, b) => a.f - b.f);
+    return { x: simplex[0].x, f: -simplex[0].f };
+  }
+
+  // Starting values
+  const totalET = studies.reduce((s, d) => s + d.et, 0);
+  const totalNT = studies.reduce((s, d) => s + d.nt, 0);
+  const totalEC = studies.reduce((s, d) => s + d.ec, 0);
+  const totalNC = studies.reduce((s, d) => s + d.nc, 0);
+  const muT0 = Math.max(0.001, Math.min(0.999, totalET / totalNT));
+  const muC0 = Math.max(0.001, Math.min(0.999, totalEC / totalNC));
+  const logitMuT0 = Math.log(muT0 / (1 - muT0));
+  const logitMuC0 = Math.log(muC0 / (1 - muC0));
+  const logPhi0 = Math.log(10); // phi=10 as starting value
+
+  const result = nelderMead(logLik, [logitMuT0, logitMuC0, logPhi0], 3000);
+  const muT = 1 / (1 + Math.exp(-result.x[0]));
+  const muC = 1 / (1 + Math.exp(-result.x[1]));
+  const phi = Math.exp(result.x[2]);
+  const OR = (muT / (1 - muT)) / (muC / (1 - muC));
+
+  // Profile likelihood CI: compute by stepping logOR and maximizing over nuisance
+  // Simplified: use Wald SE from numerical Hessian
+  const eps = 1e-4;
+  const f0 = logLik(result.x);
+  const hess = [];
+  for (let i = 0; i < 3; i++) {
+    const row = [];
+    for (let j = 0; j < 3; j++) {
+      const xpp = result.x.slice(); xpp[i] += eps; xpp[j] += eps;
+      const xpm = result.x.slice(); xpm[i] += eps; xpm[j] -= eps;
+      const xmp = result.x.slice(); xmp[i] -= eps; xmp[j] += eps;
+      const xmm = result.x.slice(); xmm[i] -= eps; xmm[j] -= eps;
+      row.push((logLik(xpp) - logLik(xpm) - logLik(xmp) + logLik(xmm)) / (4 * eps * eps));
+    }
+    hess.push(row);
+  }
+  // Invert 3x3 Hessian (negated for Fisher info)
+  const H = hess.map(r => r.map(v => -v));
+  const det3 = H[0][0] * (H[1][1] * H[2][2] - H[1][2] * H[2][1])
+             - H[0][1] * (H[1][0] * H[2][2] - H[1][2] * H[2][0])
+             + H[0][2] * (H[1][0] * H[2][1] - H[1][1] * H[2][0]);
+  let seLogOR = NaN;
+  if (Math.abs(det3) > 1e-30) {
+    const invH = [
+      [(H[1][1] * H[2][2] - H[1][2] * H[2][1]) / det3, (H[0][2] * H[2][1] - H[0][1] * H[2][2]) / det3, (H[0][1] * H[1][2] - H[0][2] * H[1][1]) / det3],
+      [(H[1][2] * H[2][0] - H[1][0] * H[2][2]) / det3, (H[0][0] * H[2][2] - H[0][2] * H[2][0]) / det3, (H[0][2] * H[1][0] - H[0][0] * H[1][2]) / det3],
+      [(H[1][0] * H[2][1] - H[1][1] * H[2][0]) / det3, (H[0][1] * H[2][0] - H[0][0] * H[2][1]) / det3, (H[0][0] * H[1][1] - H[0][1] * H[1][0]) / det3]
+    ];
+    // SE of logOR = SE of (logitMuT - logitMuC) via delta method
+    // d(logOR)/d(logitMuT) = 1, d(logOR)/d(logitMuC) = -1, d(logOR)/d(logPhi) = 0
+    const varLogOR = invH[0][0] - 2 * invH[0][1] + invH[1][1];
+    seLogOR = varLogOR > 0 ? Math.sqrt(varLogOR) : NaN;
+  }
+
+  const logOR = Math.log(OR);
+  const alpha = parseFloat(document.getElementById('alpha').value) || 0.05;
+  const zc = normalQuantile(1 - alpha / 2);
+  const ci = isNaN(seLogOR) ? [NaN, NaN] : [Math.exp(logOR - zc * seLogOR), Math.exp(logOR + zc * seLogOR)];
+  const p = isNaN(seLogOR) ? NaN : 2 * (1 - normalCDF(Math.abs(logOR / seLogOR)));
+
+  return {
+    method: 'Beta-Binomial', muT, muC, phi, OR, logOR, se: seLogOR, ci, p,
+    k: studies.length, logLik: result.f
+  };
+}
+
+// 4. Exact Conditional Test (conditional MH via hypergeometric)
+function exactConditionalTest(data) {
+  const studies = data.filter(d => !d.excluded && (d.et + d.ec) > 0);
+  if (studies.length === 0) return null;
+
+  // For each study under H0 (OR=1): X_i ~ Hypergeometric(N_i, M_i, n_i)
+  // where N_i = nt+nc, M_i = et+ec (total events), n_i = nt (treatment arm size)
+  // Exact p-value: sum of probabilities of outcomes as extreme as observed
+
+  // For single study or combined: compute observed sum and its distribution
+  // Use convolution approach for multiple studies
+  function hypergeomPMF(x, N, K, n) {
+    // P(X=x) = C(K,x)*C(N-K,n-x)/C(N,n)
+    const lo = Math.max(0, n + K - N);
+    const hi = Math.min(n, K);
+    if (x < lo || x > hi) return 0;
+    return Math.exp(lchoose(K, x) + lchoose(N - K, n - x) - lchoose(N, n));
+  }
+
+  function lchoose(n, k) {
+    if (k < 0 || k > n) return -Infinity;
+    if (k === 0 || k === n) return 0;
+    return lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1);
+  }
+
+  // For each study, compute the distribution
+  // Convolve distributions to get distribution of sum of treatment events
+  let dist = [1]; // prob of sum=0
+  let offset = 0; // what index 0 represents
+  let observedSum = 0;
+  let expectedSum = 0;
+
+  for (const d of studies) {
+    const N = d.nt + d.nc;
+    const K = d.et + d.ec;
+    const n = d.nt;
+    const lo = Math.max(0, n + K - N);
+    const hi = Math.min(n, K);
+    observedSum += d.et;
+    expectedSum += K * n / N;
+
+    // Convolve current dist with this study's hypergeometric
+    const newLen = dist.length + (hi - lo);
+    const newDist = new Array(newLen).fill(0);
+    for (let prevIdx = 0; prevIdx < dist.length; prevIdx++) {
+      if (dist[prevIdx] < 1e-300) continue;
+      for (let x = lo; x <= hi; x++) {
+        const prob = hypergeomPMF(x, N, K, n);
+        newDist[prevIdx + (x - lo)] += dist[prevIdx] * prob;
+      }
+    }
+    offset += lo;
+    dist = newDist;
+  }
+
+  // Exact two-sided p-value: sum of probabilities <= prob of observed
+  const obsIdx = observedSum - offset;
+  if (obsIdx < 0 || obsIdx >= dist.length) return null;
+  const obsProb = dist[obsIdx];
+  let pExact = 0;
+  let pMid = 0;
+  for (let i = 0; i < dist.length; i++) {
+    if (dist[i] <= obsProb + 1e-14) pExact += dist[i];
+    if (dist[i] < obsProb - 1e-14) pMid += dist[i];
+  }
+  pMid += 0.5 * obsProb; // Mid-p correction
+
+  return {
+    method: 'Exact Conditional',
+    observedSum,
+    expectedSum,
+    pExact: Math.min(1, pExact),
+    pMidP: Math.min(1, pMid),
+    k: studies.length
+  };
+}
+
+// 5. Peters' Test (Peters et al. 2006, JAMA)
+function petersTest(data) {
+  const studies = data.filter(d => !d.excluded);
+  // Need studies with valid OR
+  const items = [];
+  for (const d of studies) {
+    const a = d.et2 || d.et, b = (d.nt2 || d.nt) - a, c = d.ec2 || d.ec, dd = (d.nc2 || d.nc) - c;
+    if (a <= 0 || b <= 0 || c <= 0 || dd <= 0) continue;
+    const logOR = Math.log((a * dd) / (b * c));
+    const nTotal = d.nt + d.nc;
+    const invN = 1 / nTotal;
+    const totalEvents = d.et + d.ec;
+    const weight = totalEvents > 0 ? 1 / totalEvents : 0;
+    items.push({ logOR, invN, weight, nTotal, totalEvents });
+  }
+  if (items.length < 3) return null;
+
+  // Weighted linear regression: logOR = beta0 + beta1 * (1/n) weighted by 1/(et+ec)
+  let sumW = 0, sumWx = 0, sumWy = 0, sumWxy = 0, sumWxx = 0;
+  for (const it of items) {
+    sumW += it.weight;
+    sumWx += it.weight * it.invN;
+    sumWy += it.weight * it.logOR;
+    sumWxy += it.weight * it.invN * it.logOR;
+    sumWxx += it.weight * it.invN * it.invN;
+  }
+  const beta1 = (sumW * sumWxy - sumWx * sumWy) / (sumW * sumWxx - sumWx * sumWx);
+  const beta0 = (sumWy - beta1 * sumWx) / sumW;
+
+  // SE of beta1
+  let sumResidSq = 0;
+  for (const it of items) {
+    const pred = beta0 + beta1 * it.invN;
+    sumResidSq += it.weight * (it.logOR - pred) * (it.logOR - pred);
+  }
+  const sigmaHatSq = sumResidSq / (items.length - 2);
+  const seBeta1 = Math.sqrt(sigmaHatSq * sumW / (sumW * sumWxx - sumWx * sumWx));
+
+  const tStat = beta1 / seBeta1;
+  const dfPeters = items.length - 2;
+  const pPeters = 2 * (1 - tCDF(Math.abs(tStat), dfPeters));
+
+  return {
+    method: 'Peters Test',
+    intercept: beta0,
+    slope: beta1,
+    se: seBeta1,
+    t: tStat,
+    df: dfPeters,
+    p: pPeters,
+    k: items.length,
+    biasDetected: pPeters < (parseFloat(document.getElementById('alpha').value) || 0.05)
+  };
+}
+
+// 6. Prediction Interval for pooled OR (uses DL results)
+function predictionInterval(dlResult) {
+  if (!dlResult || dlResult.k < 3) return null;
+  const k = dlResult.k;
+  const alpha = parseFloat(document.getElementById('alpha').value) || 0.05;
+  // PI = exp(logOR +/- t_{k-2} * sqrt(se^2 + tau2))
+  const dfPI = k - 2; // t_{k-2}, NOT t_{k-1}
+  const tVal = tQuantile(1 - alpha / 2, dfPI);
+  const piWidth = tVal * Math.sqrt(dlResult.se * dlResult.se + (dlResult.tau2 || 0));
+  const piLo = Math.exp(dlResult.logOR - piWidth);
+  const piHi = Math.exp(dlResult.logOR + piWidth);
+  return {
+    method: 'Prediction Interval',
+    OR: dlResult.OR,
+    logOR: dlResult.logOR,
+    pi: [piLo, piHi],
+    tVal,
+    df: dfPI,
+    se: dlResult.se,
+    tau2: dlResult.tau2,
+    k
+  };
+}
+
+// ═══════════════════════════════════════════
+// ADVANCED RENDERING
+// ═══════════════════════════════════════════
+function renderAdvanced() {
+  const r = lastResults;
+  if (!r) return;
+
+  const asd = arcsineDiff(r.data);
+  const rd = riskDifference(r.data);
+  const bb = betaBinomial(r.data);
+  const exact = exactConditionalTest(r.data);
+  const peters = petersTest(r.data);
+  const pi = predictionInterval(r.dl);
+
+  lastResults.asd = asd;
+  lastResults.rd = rd;
+  lastResults.bb = bb;
+  lastResults.exact = exact;
+  lastResults.peters = peters;
+  lastResults.pi = pi;
+
+  // 1. Arcsine Difference
+  if (asd) {
+    document.getElementById('advArcsineSummary').innerHTML = `
+      <div class="stat-box"><div class="value">${asd.pooledASD.toFixed(4)}</div><div class="label">Pooled ASD (RE)</div></div>
+      <div class="stat-box"><div class="value">${asd.ci[0].toFixed(4)} to ${asd.ci[1].toFixed(4)}</div><div class="label">95% CI (ASD scale)</div></div>
+      <div class="stat-box"><div class="value">${asd.OR.toFixed(3)}</div><div class="label">Approx OR</div></div>
+      <div class="stat-box"><div class="value">${asd.orCI[0].toFixed(3)} to ${asd.orCI[1].toFixed(3)}</div><div class="label">Approx OR 95% CI</div></div>
+      <div class="stat-box"><div class="value">${asd.p < 0.001 ? asd.p.toExponential(2) : asd.p.toFixed(4)}</div><div class="label">P-value</div></div>
+      <div class="stat-box"><div class="value">${asd.I2.toFixed(1)}%</div><div class="label">I-squared</div></div>
+    `;
+    document.querySelector('#arcsineTable tbody').innerHTML = asd.items.map(it => `<tr><td>${it.name}</td><td>${it.asd.toFixed(5)}</td><td>${it.v.toFixed(6)}</td><td>${it.wtPct.toFixed(1)}%</td><td>${(it.asd - 1.96 * Math.sqrt(it.v)).toFixed(5)} to ${(it.asd + 1.96 * Math.sqrt(it.v)).toFixed(5)}</td></tr>`).join('');
+  } else {
+    document.getElementById('advArcsineSummary').innerHTML = '<p style="color:var(--text2)">Insufficient data (need 2+ included studies).</p>';
+    document.querySelector('#arcsineTable tbody').innerHTML = '';
+  }
+
+  // 2. Risk Difference + NNH
+  if (rd) {
+    const nnh = rd.nnh;
+    const nnh_display = Math.abs(nnh) > 1e6 ? 'Infinity' : Math.round(nnh).toLocaleString();
+    const nnh_ci_display = (Math.abs(rd.nnh_ci[0]) > 1e6 ? '-Inf' : Math.round(rd.nnh_ci[0]).toLocaleString()) +
+      ' to ' + (Math.abs(rd.nnh_ci[1]) > 1e6 ? 'Inf' : Math.round(rd.nnh_ci[1]).toLocaleString());
+    const rdPer1000 = (rd.pooledRD * 1000).toFixed(2);
+    document.getElementById('advRDSummary').innerHTML = `
+      <div class="stat-box"><div class="value">${rd.pooledRD.toFixed(5)}</div><div class="label">Pooled RD (RE)</div></div>
+      <div class="stat-box"><div class="value">${rd.ci[0].toFixed(5)} to ${rd.ci[1].toFixed(5)}</div><div class="label">95% CI</div></div>
+      <div class="stat-box"><div class="value">${rdPer1000}</div><div class="label">RD per 1000</div></div>
+      <div class="stat-box"><div class="value">${nnh_display}</div><div class="label">NNH</div></div>
+      <div class="stat-box"><div class="value">${nnh_ci_display}</div><div class="label">NNH 95% CI</div></div>
+      <div class="stat-box"><div class="value">${rd.p < 0.001 ? rd.p.toExponential(2) : rd.p.toFixed(4)}</div><div class="label">P-value</div></div>
+    `;
+    document.querySelector('#rdTable tbody').innerHTML = rd.items.map(it => `<tr><td>${it.name}</td><td>${it.rd.toFixed(5)}</td><td>${it.v.toFixed(8)}</td><td>${it.wtPct.toFixed(1)}%</td><td>${(it.rd - 1.96 * Math.sqrt(it.v)).toFixed(5)} to ${(it.rd + 1.96 * Math.sqrt(it.v)).toFixed(5)}</td></tr>`).join('');
+  } else {
+    document.getElementById('advRDSummary').innerHTML = '<p style="color:var(--text2)">Insufficient data.</p>';
+    document.querySelector('#rdTable tbody').innerHTML = '';
+  }
+
+  // 3. Beta-Binomial
+  if (bb) {
+    const muTPct = (bb.muT * 100).toFixed(3);
+    const muCPct = (bb.muC * 100).toFixed(3);
+    document.getElementById('advBBSummary').innerHTML = `
+      <div class="stat-box"><div class="value">${muTPct}%</div><div class="label">mu_treatment</div></div>
+      <div class="stat-box"><div class="value">${muCPct}%</div><div class="label">mu_control</div></div>
+      <div class="stat-box"><div class="value">${bb.phi.toFixed(2)}</div><div class="label">phi (dispersion)</div></div>
+      <div class="stat-box"><div class="value">${bb.OR.toFixed(3)}</div><div class="label">OR</div></div>
+      <div class="stat-box"><div class="value">${isNaN(bb.ci[0]) ? 'N/A' : bb.ci[0].toFixed(3) + ' to ' + bb.ci[1].toFixed(3)}</div><div class="label">95% CI</div></div>
+      <div class="stat-box"><div class="value">${isNaN(bb.p) ? 'N/A' : (bb.p < 0.001 ? bb.p.toExponential(2) : bb.p.toFixed(4))}</div><div class="label">P-value</div></div>
+      <div class="stat-box"><div class="value">${bb.logLik.toFixed(2)}</div><div class="label">Log-likelihood</div></div>
+    `;
+  } else {
+    document.getElementById('advBBSummary').innerHTML = '<p style="color:var(--text2)">Insufficient data or convergence failure.</p>';
+  }
+
+  // 4. Exact Conditional
+  if (exact) {
+    document.getElementById('advExactSummary').innerHTML = `
+      <div class="stat-box"><div class="value">${exact.observedSum}</div><div class="label">Observed treatment events</div></div>
+      <div class="stat-box"><div class="value">${exact.expectedSum.toFixed(2)}</div><div class="label">Expected (H0: OR=1)</div></div>
+      <div class="stat-box"><div class="value">${exact.pExact < 0.001 ? exact.pExact.toExponential(2) : exact.pExact.toFixed(4)}</div><div class="label">Exact P-value</div></div>
+      <div class="stat-box"><div class="value">${exact.pMidP < 0.001 ? exact.pMidP.toExponential(2) : exact.pMidP.toFixed(4)}</div><div class="label">Mid-P value</div></div>
+      <div class="stat-box"><div class="value">${exact.k}</div><div class="label">Studies used</div></div>
+      <div class="stat-box"><div class="value">${exact.pMidP < (parseFloat(document.getElementById('alpha').value) || 0.05) ? '<span class="badge badge-red">Signal</span>' : '<span class="badge badge-green">No signal</span>'}</div><div class="label">Mid-P verdict</div></div>
+    `;
+  } else {
+    document.getElementById('advExactSummary').innerHTML = '<p style="color:var(--text2)">No informative studies for exact test.</p>';
+  }
+
+  // 5. Peters' Test
+  if (peters) {
+    document.getElementById('advPetersSummary').innerHTML = `
+      <div class="stat-box"><div class="value">${peters.slope.toFixed(4)}</div><div class="label">Slope (beta1)</div></div>
+      <div class="stat-box"><div class="value">${peters.se.toFixed(4)}</div><div class="label">SE of slope</div></div>
+      <div class="stat-box"><div class="value">${peters.t.toFixed(3)}</div><div class="label">t-statistic</div></div>
+      <div class="stat-box"><div class="value">${peters.df}</div><div class="label">df</div></div>
+      <div class="stat-box"><div class="value">${peters.p < 0.001 ? peters.p.toExponential(2) : peters.p.toFixed(4)}</div><div class="label">P-value</div></div>
+      <div class="stat-box"><div class="value">${peters.biasDetected ? '<span class="badge badge-red">Bias detected</span>' : '<span class="badge badge-green">No bias</span>'}</div><div class="label">Verdict</div></div>
+    `;
+  } else {
+    document.getElementById('advPetersSummary').innerHTML = '<p style="color:var(--text2)">Need 3+ studies with valid OR for Peters test.</p>';
+  }
+
+  // 6. Prediction Interval
+  if (pi) {
+    document.getElementById('advPISummary').innerHTML = `
+      <div class="stat-box"><div class="value">${pi.OR.toFixed(3)}</div><div class="label">Pooled OR (DL)</div></div>
+      <div class="stat-box"><div class="value">${pi.pi[0].toFixed(3)} to ${pi.pi[1].toFixed(3)}</div><div class="label">95% Prediction Interval</div></div>
+      <div class="stat-box"><div class="value">${pi.tVal.toFixed(3)}</div><div class="label">t_{k-2} quantile</div></div>
+      <div class="stat-box"><div class="value">${pi.df}</div><div class="label">df (k-2)</div></div>
+      <div class="stat-box"><div class="value">${pi.tau2.toFixed(5)}</div><div class="label">tau-squared</div></div>
+      <div class="stat-box"><div class="value">${pi.pi[0] > 1 || pi.pi[1] < 1 ? '<span class="badge badge-red">Excludes 1</span>' : '<span class="badge badge-amber">Includes 1</span>'}</div><div class="label">PI includes null?</div></div>
+    `;
+  } else {
+    document.getElementById('advPISummary').innerHTML = '<p style="color:var(--text2)">Need 3+ studies with DL result for prediction interval.</p>';
+  }
+
+  // Add advanced methods to the main results method table
+  addAdvancedToMethodTable();
+}
+
+function addAdvancedToMethodTable() {
+  const r = lastResults;
+  const tbody = document.querySelector('#methodTable tbody');
+  const alpha = parseFloat(document.getElementById('alpha').value) || 0.05;
+  const rows = [];
+
+  // Arcsine diff (as OR)
+  if (r.asd) {
+    const m = r.asd;
+    const sig = m.p < alpha;
+    rows.push(`<tr style="background:rgba(99,102,241,0.05)"><td><strong>${m.method}</strong></td><td>${m.OR.toFixed(3)}</td><td>${m.orCI[0].toFixed(3)} \u2013 ${m.orCI[1].toFixed(3)}</td><td>${m.p < 0.001 ? m.p.toExponential(2) : m.p.toFixed(4)}</td><td>${m.k}</td><td>${sig ? '<span class="badge badge-red">Signal</span>' : '<span class="badge badge-green">No signal</span>'} <span class="badge badge-amber">ASD</span></td></tr>`);
+  }
+  // Beta-Binomial
+  if (r.bb && !isNaN(r.bb.p)) {
+    const m = r.bb;
+    const sig = m.p < alpha;
+    rows.push(`<tr style="background:rgba(99,102,241,0.05)"><td><strong>${m.method}</strong></td><td>${m.OR.toFixed(3)}</td><td>${isNaN(m.ci[0]) ? 'N/A' : m.ci[0].toFixed(3) + ' \u2013 ' + m.ci[1].toFixed(3)}</td><td>${m.p < 0.001 ? m.p.toExponential(2) : m.p.toFixed(4)}</td><td>${m.k}</td><td>${sig ? '<span class="badge badge-red">Signal</span>' : '<span class="badge badge-green">No signal</span>'} <span class="badge badge-amber">BB</span></td></tr>`);
+  }
+  // Risk Difference
+  if (r.rd) {
+    const m = r.rd;
+    const sig = m.p < alpha;
+    const nnh = Math.abs(m.nnh) > 1e6 ? 'Inf' : Math.round(m.nnh);
+    rows.push(`<tr style="background:rgba(99,102,241,0.05)"><td><strong>Risk Difference</strong></td><td>RD: ${m.pooledRD.toFixed(5)}</td><td>${m.ci[0].toFixed(5)} \u2013 ${m.ci[1].toFixed(5)}</td><td>${m.p < 0.001 ? m.p.toExponential(2) : m.p.toFixed(4)}</td><td>${m.k}</td><td>NNH=${nnh} ${sig ? '<span class="badge badge-red">Signal</span>' : '<span class="badge badge-green">No signal</span>'}</td></tr>`);
+  }
+  // Exact test
+  if (r.exact) {
+    rows.push(`<tr style="background:rgba(99,102,241,0.05)"><td><strong>Exact Conditional</strong></td><td colspan="2">Obs=${r.exact.observedSum} Exp=${r.exact.expectedSum.toFixed(1)}</td><td>${r.exact.pMidP < 0.001 ? r.exact.pMidP.toExponential(2) : r.exact.pMidP.toFixed(4)} (mid-p)</td><td>${r.exact.k}</td><td>${r.exact.pMidP < alpha ? '<span class="badge badge-red">Signal</span>' : '<span class="badge badge-green">No signal</span>'}</td></tr>`);
+  }
+
+  tbody.innerHTML += rows.join('');
+}
+
+// Export advanced CSV
+function exportAdvancedCSV() {
+  if (!lastResults) return;
+  const r = lastResults;
+  let csv = 'SafetyMA Advanced Analysis Results\n\n';
+
+  // Methods summary
+  csv += 'Method,Statistic,Value,CI_Lower,CI_Upper,P\n';
+  if (r.peto) csv += `Peto OR,OR,${r.peto.OR},${r.peto.ci[0]},${r.peto.ci[1]},${r.peto.p}\n`;
+  if (r.mh) csv += `Mantel-Haenszel,OR,${r.mh.OR},${r.mh.ci[0]},${r.mh.ci[1]},${r.mh.p}\n`;
+  if (r.dl) csv += `DL RE,OR,${r.dl.OR},${r.dl.ci[0]},${r.dl.ci[1]},${r.dl.p}\n`;
+  if (r.asd) csv += `Arcsine Diff,ASD,${r.asd.pooledASD},${r.asd.ci[0]},${r.asd.ci[1]},${r.asd.p}\nArcsine Diff,OR_approx,${r.asd.OR},${r.asd.orCI[0]},${r.asd.orCI[1]},${r.asd.p}\n`;
+  if (r.rd) csv += `Risk Difference,RD,${r.rd.pooledRD},${r.rd.ci[0]},${r.rd.ci[1]},${r.rd.p}\nNNH,,${r.rd.nnh},${r.rd.nnh_ci[0]},${r.rd.nnh_ci[1]},\n`;
+  if (r.bb) csv += `Beta-Binomial,OR,${r.bb.OR},${isNaN(r.bb.ci[0])?'':r.bb.ci[0]},${isNaN(r.bb.ci[1])?'':r.bb.ci[1]},${isNaN(r.bb.p)?'':r.bb.p}\nBeta-Binomial,mu_t,${r.bb.muT},,,,\nBeta-Binomial,mu_c,${r.bb.muC},,,,\nBeta-Binomial,phi,${r.bb.phi},,,,\n`;
+  if (r.exact) csv += `Exact Conditional,p_exact,${r.exact.pExact},,,,\nExact Conditional,p_midp,${r.exact.pMidP},,,,\nExact Conditional,observed_sum,${r.exact.observedSum},,,,\nExact Conditional,expected_sum,${r.exact.expectedSum},,,,\n`;
+  if (r.peters) csv += `Peters Test,slope,${r.peters.slope},,,,${r.peters.p}\nPeters Test,t_stat,${r.peters.t},,,,\nPeters Test,df,${r.peters.df},,,,\n`;
+  if (r.pi) csv += `Prediction Interval,OR,${r.pi.OR},${r.pi.pi[0]},${r.pi.pi[1]},\nPrediction Interval,t_val,${r.pi.tVal},,,,\nPrediction Interval,df,${r.pi.df},,,,\n`;
+
+  // Study-level ASD
+  if (r.asd) {
+    csv += '\nArcsine Difference by Study\nStudy,ASD,Variance,Weight%\n';
+    r.asd.items.forEach(it => csv += `${it.name},${it.asd},${it.v},${it.wtPct}\n`);
+  }
+  // Study-level RD
+  if (r.rd) {
+    csv += '\nRisk Difference by Study\nStudy,RD,Variance,Weight%\n';
+    r.rd.items.forEach(it => csv += `${it.name},${it.rd},${it.v},${it.wtPct}\n`);
+  }
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'safety_ma_advanced_results.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+// ═══════════════════════════════════════════
 // EXAMPLES
 // ═══════════════════════════════════════════
 const EXAMPLES={
@@ -836,11 +1567,18 @@ function exportCSV(){
   const r=lastResults;
   let csv='Study,Events_Trt,N_Trt,Events_Ctrl,N_Ctrl,Class,Excluded\n';
   r.data.forEach(d=>csv+=`${d.name},${d.et},${d.nt},${d.ec},${d.nc},${d.cls},${d.excluded}\n`);
-  csv+='\nMethod,OR,CI_lower,CI_upper,P\n';
-  [r.peto,r.mh,r.dl].filter(Boolean).forEach(m=>csv+=`${m.method},${m.OR},${m.ci[0]},${m.ci[1]},${m.p}\n`);
+  csv+='\nMethod,Statistic,Value,CI_lower,CI_upper,P\n';
+  [r.peto,r.mh,r.dl].filter(Boolean).forEach(m=>csv+=`${m.method},OR,${m.OR},${m.ci[0]},${m.ci[1]},${m.p}\n`);
+  if(r.asd)csv+=`Arcsine Diff (RE),OR_approx,${r.asd.OR},${r.asd.orCI[0]},${r.asd.orCI[1]},${r.asd.p}\n`;
+  if(r.bb&&!isNaN(r.bb.p))csv+=`Beta-Binomial,OR,${r.bb.OR},${isNaN(r.bb.ci[0])?'':r.bb.ci[0]},${isNaN(r.bb.ci[1])?'':r.bb.ci[1]},${r.bb.p}\n`;
+  if(r.rd)csv+=`Risk Difference,RD,${r.rd.pooledRD},${r.rd.ci[0]},${r.rd.ci[1]},${r.rd.p}\nNNH,,${r.rd.nnh},${r.rd.nnh_ci[0]},${r.rd.nnh_ci[1]},\n`;
+  if(r.exact)csv+=`Exact Conditional,p_exact,${r.exact.pExact},,,,\nExact Conditional,p_midp,${r.exact.pMidP},,,,\n`;
+  if(r.peters)csv+=`Peters Test,p,${r.peters.p},slope=${r.peters.slope},t=${r.peters.t},df=${r.peters.df}\n`;
+  if(r.pi)csv+=`Prediction Interval,OR,${r.pi.OR},${r.pi.pi[0]},${r.pi.pi[1]},\n`;
   const blob=new Blob([csv],{type:'text/csv'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='safety_ma_results.csv';
   document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
 }
 function exportPlot(id,name){const c=document.getElementById(id);const a=document.createElement('a');a.download=name+'.png';a.href=c.toDataURL();a.click()}
 </script>
