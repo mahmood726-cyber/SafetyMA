@@ -60,7 +60,7 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
 <div class="container">
 <header>
   <h1>SafetyMA</h1>
-  <p>Pharmacovigilance Meta-Analysis — Peto OR, MH, DL, RR, Arcsine Diff, Beta-Binomial, RD/NNH, ARI, Exact Tests, Peters'/Harbord's Bias, Doi Plot, LFK, Trim-and-Fill, GRADE, Prediction Intervals</p>
+  <p>Pharmacovigilance Meta-Analysis — Peto OR, MH, DL, RR, Knapp-Hartung, Profile Likelihood, Arcsine Diff, Beta-Binomial, Bayesian BB, RD/NNH, ARI, Exact Tests, Peters'/Harbord's Bias, Doi Plot, LFK, Galbraith, Trim-and-Fill, GRADE, LOO, Influence Diagnostics, Clopper-Pearson, Prediction Intervals</p>
 </header>
 
 <div class="tabs">
@@ -72,6 +72,7 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
   <div class="tab" onclick="showTab('funnel')">Funnel Plot</div>
   <div class="tab" onclick="showTab('doi')">Doi Plot</div>
   <div class="tab" onclick="showTab('sensitivity')">Sensitivity</div>
+  <div class="tab" onclick="showTab('loo')">LOO</div>
   <div class="tab" onclick="showTab('advanced')">Advanced</div>
   <div class="tab" onclick="showTab('guide')">Guide</div>
 </div>
@@ -142,7 +143,7 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
   </div>
   <div class="card">
     <h3>Study Details</h3>
-    <table id="studyTable"><thead><tr><th>Study</th><th>E_trt</th><th>N_trt</th><th>E_ctrl</th><th>N_ctrl</th><th>OR</th><th>95% CI</th><th>Weight (MH%)</th><th>Flag</th></tr></thead><tbody></tbody></table>
+    <table id="studyTable"><thead><tr><th>Study</th><th>E_trt</th><th>N_trt</th><th>E_ctrl</th><th>N_ctrl</th><th>OR</th><th>95% CI</th><th>Weight (MH%)</th><th>Rate_trt (CP 95%)</th><th>Rate_ctrl (CP 95%)</th><th>Flag</th></tr></thead><tbody></tbody></table>
   </div>
   <div class="btn-group">
     <button class="btn btn-secondary btn-sm" onclick="exportCSV()">Export CSV</button>
@@ -182,6 +183,12 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
   <div class="card"><h3>Funnel Plot (log OR vs SE)</h3>
     <div class="plot-container"><canvas id="funnelCanvas" width="800" height="600"></canvas></div>
   </div>
+  <div class="card">
+    <h3>Galbraith (Radial) Plot</h3>
+    <div class="info-box">X-axis: 1/SE (precision). Y-axis: logOR/SE (Z-score). Slope through origin = pooled logOR. Studies outside the 95% band (dashed) are heterogeneity drivers.</div>
+    <div class="plot-container"><canvas id="galbraithCanvas" width="800" height="600"></canvas></div>
+    <div class="btn-group"><button class="btn btn-secondary btn-sm" onclick="exportPlot('galbraithCanvas','galbraith_plot')">Export PNG</button></div>
+  </div>
 </div>
 
 <!-- DOI PLOT -->
@@ -206,6 +213,23 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
       <thead><tr><th>Correction</th><th>MH OR</th><th>95% CI</th><th>P-value</th><th>Studies included</th></tr></thead>
       <tbody></tbody>
     </table>
+  </div>
+</div>
+
+<!-- LEAVE-ONE-OUT -->
+<div class="panel" id="panel-loo">
+  <div class="card">
+    <h3>Leave-One-Out Sensitivity Analysis (Peto OR)</h3>
+    <div class="info-box">Each row shows the pooled Peto OR with that study removed. Identifies the most influential study and flags if any single removal reverses significance.</div>
+    <div class="stat-grid" id="looSummary"></div>
+    <div class="plot-container"><canvas id="looCanvas" width="950" height="600"></canvas></div>
+    <table id="looTable">
+      <thead><tr><th>Study Removed</th><th>Peto OR</th><th>95% CI</th><th>P-value</th><th>k</th><th>Significance Change?</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="btn-group">
+      <button class="btn btn-secondary btn-sm" onclick="exportPlot('looCanvas','loo_forest')">Export PNG</button>
+    </div>
   </div>
 </div>
 
@@ -273,6 +297,30 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
     <div class="info-box">Automated GRADE domains: Risk of Bias, Inconsistency (I&sup2;), Indirectness, Imprecision (CI crosses OR=1.25), Publication Bias (Peters' P &lt; 0.1). Overall: High / Moderate / Low / Very Low.</div>
     <div id="gradeTable"></div>
   </div>
+  <div class="card">
+    <h3>Knapp-Hartung Adjustment (Knapp &amp; Hartung 2003)</h3>
+    <div class="info-box">Replaces z-based CI with t_{k-1} distribution. SE inflated by sqrt(max(1, Q/(k-1))) — the HKSJ floor prevents paradoxical narrowing when Q &lt; k-1. Critical for k &lt; 20.</div>
+    <div class="stat-grid" id="advKHSummary"></div>
+  </div>
+  <div class="card">
+    <h3>Profile Likelihood CI (Hardy &amp; Thompson 1996)</h3>
+    <div class="info-box">Instead of Wald CI, finds beta where -2*log(L(beta)) = -2*log(L(beta_hat)) + chi-sq(1, alpha). Grid search at 200 points. Typically asymmetric and more accurate than Wald for small k.</div>
+    <div class="stat-grid" id="advProfileSummary"></div>
+  </div>
+  <div class="card">
+    <h3>Influence Diagnostics (Viechtbauer 2010)</h3>
+    <div class="info-box">Cook's distance, DFBETAS (standardized influence on pooled logOR), hat values (leverage), and studentized residuals. Flags: Cook's &gt; 4/k, |DFBETAS| &gt; 1, hat &gt; 3*mean(hat), |rstudent| &gt; 2.</div>
+    <div class="stat-grid" id="advInfluenceSummary"></div>
+    <table id="influenceTable">
+      <thead><tr><th>Study</th><th>Cook's D</th><th>DFBETAS</th><th>Hat</th><th>Rstudent</th><th>Flags</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h3>Bayesian Conjugate Beta-Binomial</h3>
+    <div class="info-box">Prior: Beta(1,1) (uniform) per arm. Posterior: Beta(1+events, 1+non-events). Posterior OR via 10,000 Monte Carlo draws (seeded PRNG). Handles zero cells naturally — no correction needed. Reports posterior median + 95% HPD CrI.</div>
+    <div class="stat-grid" id="advBayesBBSummary"></div>
+  </div>
   <div class="btn-group">
     <button class="btn btn-secondary btn-sm" onclick="exportAdvancedCSV()">Export Advanced CSV</button>
   </div>
@@ -302,11 +350,18 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
       <tr><td><strong>ARI (Baseline-adjusted)</strong></td><td>Absolute Risk Increase = (pooled RR - 1) &times; baseline risk. NNH = 1/ARI. More clinically meaningful than trial-derived RD.</td></tr>
       <tr><td><strong>GRADE Certainty</strong></td><td>Automated assessment: Inconsistency (I&sup2; &gt; 50%), Imprecision (CI crosses OR=1.25), Publication bias (Peters' P &lt; 0.1). Traffic-light display.</td></tr>
       <tr><td><strong>CC Sensitivity</strong></td><td>Continuity correction robustness: MH OR at cc = 0, 0.1, 0.25, 0.5, 1.0. Large variation = fragile estimate.</td></tr>
+      <tr><td><strong>Knapp-Hartung</strong></td><td>Knapp &amp; Hartung 2003. Replaces z-based CI with t_{k-1}. SE inflated by sqrt(max(1, Q/(k-1))). The floor prevents paradoxical CI narrowing. Critical for k &lt; 20 where z is liberal.</td></tr>
+      <tr><td><strong>Profile Likelihood CI</strong></td><td>Hardy &amp; Thompson 1996. Grid search on profile log-likelihood at 200 points. Typically asymmetric and more accurate than Wald CI for small k. Finds beta where -2*logL = -2*logL_max + chi-sq.</td></tr>
+      <tr><td><strong>Leave-One-Out</strong></td><td>Recomputes Peto OR omitting each study in turn. Identifies most influential study. Flags significance reversals &mdash; critical for fragility assessment.</td></tr>
+      <tr><td><strong>Influence Diagnostics</strong></td><td>Viechtbauer 2010. Cook's distance, DFBETAS, hat values, studentized residuals. Flags studies that disproportionately affect the pooled estimate.</td></tr>
+      <tr><td><strong>Bayesian Conjugate BB</strong></td><td>Beta(1,1) uniform prior per arm. Posterior OR via 10,000 MC draws (seeded PRNG). Reports median + HPD CrI. Handles zero cells naturally &mdash; no correction needed.</td></tr>
+      <tr><td><strong>Clopper-Pearson CI</strong></td><td>Exact binomial CI for individual study rates. Lower: qbeta(alpha/2, x, n-x+1). More conservative than Wald but correct for small counts.</td></tr>
+      <tr><td><strong>Galbraith Plot</strong></td><td>Radial plot: 1/SE vs logOR/SE. Slope = pooled logOR. Outliers outside 95% band are heterogeneity drivers. Complements the funnel plot.</td></tr>
     </table>
   </div>
 </div>
 
-<footer>SafetyMA v3.0 — Mahmood Ahmad, Tahir Heart Institute — Offline-first, no data leaves your browser — RR, Doi/LFK, Harbord, Trim-and-Fill, GRADE, ARI, CC Sensitivity + all v2.0 methods</footer>
+<footer>SafetyMA v4.0 — Mahmood Ahmad, Tahir Heart Institute — Offline-first, no data leaves your browser — 24 methods: Peto, MH, DL, RR, Knapp-Hartung, Profile Likelihood, LOO, Influence Diagnostics, Bayesian BB, Clopper-Pearson, Galbraith, Arcsine Diff, BB, RD/NNH, ARI, Exact, Peters'/Harbord's, Doi/LFK, Trim-and-Fill, GRADE, CC Sensitivity, Prediction Intervals</footer>
 </div>
 
 <script>
@@ -542,8 +597,10 @@ function runAnalysis(){
   const dl=dlRE(data);
   const cumul=cumulativePeto(data);
   const rr=rrPooling(data);
-  lastResults={data,raw,peto,mh,dl,cumul,rr};
-  renderResults();renderForest();renderLabbe();renderCumulative();renderFunnel();renderAdvanced();renderDoiPlot();renderCCSensitivity();
+  const kh=knappHartung(data);
+  const profileLik=profileLikelihoodCI(data);
+  lastResults={data,raw,peto,mh,dl,cumul,rr,kh,profileLik};
+  renderResults();renderForest();renderLabbe();renderCumulative();renderFunnel();renderGalbraith();renderAdvanced();renderDoiPlot();renderCCSensitivity();renderLOO();
   showTab('results');
 }
 
@@ -569,9 +626,22 @@ function renderResults(){
   const methods=[r.peto,r.mh,r.dl].filter(Boolean);
   const methodRows=methods.map(m=>{
     const sig=m.p<0.05;
-    return`<tr><td><strong>${m.method}</strong></td><td>${m.OR.toFixed(3)}</td><td>${m.ci[0].toFixed(3)} – ${m.ci[1].toFixed(3)}</td><td>${m.p<0.001?m.p.toExponential(2):m.p.toFixed(4)}</td><td>${m.k}</td><td>${sig?'<span class="badge badge-red">Signal</span>':'<span class="badge badge-green">No signal</span>'}</td></tr>`;
+    return`<tr><td><strong>${m.method}</strong></td><td>${m.OR.toFixed(3)}</td><td>${m.ci[0].toFixed(3)} \u2013 ${m.ci[1].toFixed(3)}</td><td>${m.p<0.001?m.p.toExponential(2):m.p.toFixed(4)}</td><td>${m.k}</td><td>${sig?'<span class="badge badge-red">Signal</span>':'<span class="badge badge-green">No signal</span>'}</td></tr>`;
   });
-  if(r.rr){const m=r.rr;const sig=m.p<0.05;methodRows.push(`<tr style="background:rgba(6,182,212,0.05)"><td><strong>${m.method}</strong></td><td>RR: ${m.RR.toFixed(3)}</td><td>${m.ci[0].toFixed(3)} – ${m.ci[1].toFixed(3)}</td><td>${m.p<0.001?m.p.toExponential(2):m.p.toFixed(4)}</td><td>${m.k}</td><td>${sig?'<span class="badge badge-red">Signal</span>':'<span class="badge badge-green">No signal</span>'} <span class="badge badge-amber">RR</span></td></tr>`);}
+  // Knapp-Hartung adjusted rows
+  if(r.kh){
+    r.kh.forEach(m=>{
+      const sig=m.p<0.05;
+      methodRows.push(`<tr style="background:rgba(6,182,212,0.05)"><td><strong>${m.method}</strong></td><td>${m.OR.toFixed(3)}</td><td>${m.ci[0].toFixed(3)} \u2013 ${m.ci[1].toFixed(3)}</td><td>${m.p<0.001?m.p.toExponential(2):m.p.toFixed(4)}</td><td>${m.k}</td><td>${sig?'<span class="badge badge-red">Signal</span>':'<span class="badge badge-green">No signal</span>'} <span class="badge badge-amber">KH</span></td></tr>`);
+    });
+  }
+  // Profile Likelihood CI row
+  if(r.profileLik){
+    const m=r.profileLik;
+    const sig=m.ci[0]>1||m.ci[1]<1;
+    methodRows.push(`<tr style="background:rgba(99,102,241,0.05)"><td><strong>${m.method}</strong></td><td>${m.OR.toFixed(3)}</td><td>${m.ci[0].toFixed(3)} \u2013 ${m.ci[1].toFixed(3)}</td><td>${m.p<0.001?m.p.toExponential(2):m.p.toFixed(4)}</td><td>${m.k}</td><td>${sig?'<span class="badge badge-red">Signal</span>':'<span class="badge badge-green">No signal</span>'} <span class="badge badge-amber">PL</span></td></tr>`);
+  }
+  if(r.rr){const m=r.rr;const sig=m.p<0.05;methodRows.push(`<tr style="background:rgba(6,182,212,0.05)"><td><strong>${m.method}</strong></td><td>RR: ${m.RR.toFixed(3)}</td><td>${m.ci[0].toFixed(3)} \u2013 ${m.ci[1].toFixed(3)}</td><td>${m.p<0.001?m.p.toExponential(2):m.p.toFixed(4)}</td><td>${m.k}</td><td>${sig?'<span class="badge badge-red">Signal</span>':'<span class="badge badge-green">No signal</span>'} <span class="badge badge-amber">RR</span></td></tr>`);}
   document.querySelector('#methodTable tbody').innerHTML=methodRows.join('');
 
   const hets=[r.mh,r.dl].filter(m=>m&&m.Q!==undefined);
@@ -588,17 +658,24 @@ function renderResults(){
   },0);
   document.querySelector('#studyTable tbody').innerHTML=r.data.map(d=>{
     const a=d.et2||d.et,b=(d.nt2||d.nt)-a,c=d.ec2||d.ec,dd=(d.nc2||d.nc)-c;
-    let or='—',ci='—',wt='—';
+    let or='\u2014',ci='\u2014',wt='\u2014';
     if(!d.excluded&&a>0&&b>0&&c>0&&dd>0){
       or=((a*dd)/(b*c)).toFixed(3);
       const lnor=Math.log((a*dd)/(b*c));
       const se=Math.sqrt(1/a+1/b+1/c+1/dd);
-      ci=`${Math.exp(lnor-1.96*se).toFixed(3)} – ${Math.exp(lnor+1.96*se).toFixed(3)}`;
+      ci=`${Math.exp(lnor-1.96*se).toFixed(3)} \u2013 ${Math.exp(lnor+1.96*se).toFixed(3)}`;
       const n=(d.nt2||d.nt)+(d.nc2||d.nc);
-      wt=totalMHW>0?((a*dd/n)/totalMHW*100).toFixed(1)+'%':'—';
+      wt=totalMHW>0?((a*dd/n)/totalMHW*100).toFixed(1)+'%':'\u2014';
     }
+    // Clopper-Pearson exact CIs for individual study rates
+    const cpTrt=clopperPearsonCI(d.et, d.nt, 0.05);
+    const cpCtrl=clopperPearsonCI(d.ec, d.nc, 0.05);
+    const rateTrt=(d.et/d.nt*100).toFixed(2)+'%';
+    const rateCtrl=(d.ec/d.nc*100).toFixed(2)+'%';
+    const cpTrtStr=rateTrt+' ('+(cpTrt[0]*100).toFixed(2)+'\u2013'+(cpTrt[1]*100).toFixed(2)+'%)';
+    const cpCtrlStr=rateCtrl+' ('+(cpCtrl[0]*100).toFixed(2)+'\u2013'+(cpCtrl[1]*100).toFixed(2)+'%)';
     const flag=d.excluded?'<span class="badge badge-amber">Excluded</span>':d.cls==='single-zero'?'<span class="badge badge-amber">Zero-cell</span>':d.cls==='double-zero'?'<span class="badge badge-red">Double-zero</span>':'';
-    return`<tr><td>${d.name}</td><td>${d.et}</td><td>${d.nt}</td><td>${d.ec}</td><td>${d.nc}</td><td>${or}</td><td>${ci}</td><td>${wt}</td><td>${flag}</td></tr>`;
+    return`<tr><td>${d.name}</td><td>${d.et}</td><td>${d.nt}</td><td>${d.ec}</td><td>${d.nc}</td><td>${or}</td><td>${ci}</td><td>${wt}</td><td style="font-size:0.8rem">${cpTrtStr}</td><td style="font-size:0.8rem">${cpCtrlStr}</td><td>${flag}</td></tr>`;
   }).join('');
 }
 
@@ -1444,6 +1521,8 @@ function renderAdvanced() {
   const harbord = harbordTest(r.data);
   const tf = trimAndFill(r.data, r.peto ? r.peto.logOR : (r.mh ? r.mh.logOR : 0));
   const grade = gradeAssessment({ ...r, peters });
+  const influence = influenceDiagnostics(r.data);
+  const bayesBB = bayesianBetaBinomial(r.data);
 
   lastResults.asd = asd;
   lastResults.rd = rd;
@@ -1454,6 +1533,8 @@ function renderAdvanced() {
   lastResults.harbord = harbord;
   lastResults.tf = tf;
   lastResults.grade = grade;
+  lastResults.influence = influence;
+  lastResults.bayesBB = bayesBB;
 
   // 1. Arcsine Difference
   if (asd) {
@@ -1638,6 +1719,72 @@ function renderAdvanced() {
     document.getElementById('gradeTable').innerHTML = '<p style="color:var(--text2)">Insufficient data for GRADE assessment.</p>';
   }
 
+  // 12. Knapp-Hartung
+  if (r.kh && r.kh.length > 0) {
+    let khHTML = '';
+    for (const m of r.kh) {
+      khHTML += `
+        <div class="stat-box"><div class="value">${m.OR.toFixed(3)}</div><div class="label">${m.method} OR</div></div>
+        <div class="stat-box"><div class="value">${m.ci[0].toFixed(3)} to ${m.ci[1].toFixed(3)}</div><div class="label">KH 95% CI</div></div>
+        <div class="stat-box"><div class="value">${m.standardCI[0].toFixed(3)} to ${m.standardCI[1].toFixed(3)}</div><div class="label">Standard 95% CI</div></div>
+        <div class="stat-box"><div class="value">${m.p < 0.001 ? m.p.toExponential(2) : m.p.toFixed(4)}</div><div class="label">P-value (KH)</div></div>
+        <div class="stat-box"><div class="value">${m.qKH.toFixed(3)}</div><div class="label">q_KH (floored at 1)</div></div>
+        <div class="stat-box"><div class="value">t(${m.dfKH}) = ${m.tVal.toFixed(3)}</div><div class="label">t quantile (df=k-1)</div></div>
+      `;
+    }
+    document.getElementById('advKHSummary').innerHTML = khHTML;
+  } else {
+    document.getElementById('advKHSummary').innerHTML = '<p style="color:var(--text2)">Need 2+ studies for Knapp-Hartung adjustment.</p>';
+  }
+
+  // 13. Profile Likelihood CI
+  if (r.profileLik) {
+    const m = r.profileLik;
+    document.getElementById('advProfileSummary').innerHTML = `
+      <div class="stat-box"><div class="value">${m.OR.toFixed(3)}</div><div class="label">DL RE OR</div></div>
+      <div class="stat-box"><div class="value">${m.ci[0].toFixed(3)} to ${m.ci[1].toFixed(3)}</div><div class="label">Profile Likelihood 95% CI</div></div>
+      <div class="stat-box"><div class="value">${m.waldCI[0].toFixed(3)} to ${m.waldCI[1].toFixed(3)}</div><div class="label">Wald 95% CI</div></div>
+      <div class="stat-box"><div class="value">${m.p < 0.001 ? m.p.toExponential(2) : m.p.toFixed(4)}</div><div class="label">P-value (Wald)</div></div>
+      <div class="stat-box"><div class="value">${m.ci[0] !== m.ci[1] ? (Math.log(m.ci[1]) - Math.log(m.ci[0])).toFixed(4) : 'N/A'}</div><div class="label">PL CI width (log scale)</div></div>
+      <div class="stat-box"><div class="value">${m.k}</div><div class="label">Studies</div></div>
+    `;
+  } else {
+    document.getElementById('advProfileSummary').innerHTML = '<p style="color:var(--text2)">Need 2+ studies with valid OR for Profile Likelihood CI.</p>';
+  }
+
+  // 14. Influence Diagnostics
+  if (influence) {
+    document.getElementById('advInfluenceSummary').innerHTML = `
+      <div class="stat-box"><div class="value">${influence.k}</div><div class="label">Studies</div></div>
+      <div class="stat-box"><div class="value">${influence.nFlagged}</div><div class="label">Flagged Influential</div></div>
+      <div class="stat-box"><div class="value">${influence.tau2.toFixed(5)}</div><div class="label">tau-squared</div></div>
+      <div class="stat-box"><div class="value">${influence.betaRE.toFixed(4)}</div><div class="label">Pooled logOR</div></div>
+    `;
+    document.querySelector('#influenceTable tbody').innerHTML = influence.items.map(it => {
+      const flagBadges = it.flags.map(f => '<span class="badge badge-red">' + f + '</span>').join(' ');
+      const rowBg = it.flags.length > 0 ? ' style="background:rgba(239,68,68,0.06)"' : '';
+      return `<tr${rowBg}><td>${it.name}</td><td>${it.cooksD.toFixed(4)}</td><td>${it.dfbetas.toFixed(4)}</td><td>${it.hat.toFixed(4)}</td><td>${it.rstudent.toFixed(3)}</td><td>${flagBadges || '<span class="badge badge-green">OK</span>'}</td></tr>`;
+    }).join('');
+  } else {
+    document.getElementById('advInfluenceSummary').innerHTML = '<p style="color:var(--text2)">Need 3+ studies with valid OR for influence diagnostics.</p>';
+    document.querySelector('#influenceTable tbody').innerHTML = '';
+  }
+
+  // 15. Bayesian Conjugate Beta-Binomial
+  if (bayesBB) {
+    document.getElementById('advBayesBBSummary').innerHTML = `
+      <div class="stat-box"><div class="value">${bayesBB.median.toFixed(3)}</div><div class="label">Posterior Median OR</div></div>
+      <div class="stat-box"><div class="value">${bayesBB.mean.toFixed(3)}</div><div class="label">Posterior Mean OR</div></div>
+      <div class="stat-box"><div class="value">${bayesBB.hpdCI[0].toFixed(3)} to ${bayesBB.hpdCI[1].toFixed(3)}</div><div class="label">95% HPD CrI</div></div>
+      <div class="stat-box"><div class="value">${bayesBB.etCI[0].toFixed(3)} to ${bayesBB.etCI[1].toFixed(3)}</div><div class="label">95% Equal-Tail CrI</div></div>
+      <div class="stat-box"><div class="value">${(bayesBB.probGT1 * 100).toFixed(1)}%</div><div class="label">P(OR > 1)</div></div>
+      <div class="stat-box"><div class="value">Beta(${bayesBB.aT},${bayesBB.bT}) / Beta(${bayesBB.aC},${bayesBB.bC})</div><div class="label">Posterior (trt/ctrl)</div></div>
+      <div class="stat-box"><div class="value">${bayesBB.nDraws.toLocaleString()}</div><div class="label">MC Draws</div></div>
+    `;
+  } else {
+    document.getElementById('advBayesBBSummary').innerHTML = '<p style="color:var(--text2)">Insufficient data for Bayesian analysis.</p>';
+  }
+
   // Add advanced methods to the main results method table
   addAdvancedToMethodTable();
 }
@@ -1671,6 +1818,12 @@ function addAdvancedToMethodTable() {
   if (r.exact) {
     rows.push(`<tr style="background:rgba(99,102,241,0.05)"><td><strong>Exact Conditional</strong></td><td colspan="2">Obs=${r.exact.observedSum} Exp=${r.exact.expectedSum.toFixed(1)}</td><td>${r.exact.pMidP < 0.001 ? r.exact.pMidP.toExponential(2) : r.exact.pMidP.toFixed(4)} (mid-p)</td><td>${r.exact.k}</td><td>${r.exact.pMidP < alpha ? '<span class="badge badge-red">Signal</span>' : '<span class="badge badge-green">No signal</span>'}</td></tr>`);
   }
+  // Bayesian BB
+  if (r.bayesBB) {
+    const m = r.bayesBB;
+    const sig = m.hpdCI[0] > 1 || m.hpdCI[1] < 1;
+    rows.push(`<tr style="background:rgba(99,102,241,0.05)"><td><strong>Bayesian BB</strong></td><td>${m.median.toFixed(3)}</td><td>${m.hpdCI[0].toFixed(3)} \u2013 ${m.hpdCI[1].toFixed(3)}</td><td>P(OR>1)=${(m.probGT1*100).toFixed(1)}%</td><td>${m.k}</td><td>${sig ? '<span class="badge badge-red">Signal</span>' : '<span class="badge badge-green">No signal</span>'} <span class="badge badge-amber">Bayes</span></td></tr>`);
+  }
   // Trim-and-Fill (sensitivity only)
   if (r.tf && r.tf.k0 > 0) {
     rows.push(`<tr style="background:rgba(245,158,11,0.08)"><td><strong>Trim-and-Fill</strong></td><td>${r.tf.adjOR.toFixed(3)}</td><td>${r.tf.adjCI[0].toFixed(3)} \u2013 ${r.tf.adjCI[1].toFixed(3)}</td><td>-</td><td>${r.tf.k}+${r.tf.k0}</td><td><span class="badge badge-amber">Sensitivity</span> ${r.tf.k0} imputed</td></tr>`);
@@ -1702,6 +1855,11 @@ function exportAdvancedCSV() {
   if (r.doi) csv += `Doi Plot,LFK_index,${r.doi.lfkIndex},,,,\nDoi Plot,classification,${r.doi.lfkClass},,,,\n`;
   if (r.grade) csv += `GRADE,overall,${r.grade.overall},,,,\nGRADE,downgrades,${r.grade.downgrades},,,,\n`;
   if (r.ccSens) { r.ccSens.forEach(s => csv += `CC_Sensitivity,cc=${s.cc},${s.OR},${s.ci[0]},${s.ci[1]},${s.p}\n`); }
+  if (r.kh) { r.kh.forEach(m => csv += `${m.method},OR,${m.OR},${m.ci[0]},${m.ci[1]},${m.p}\n`); }
+  if (r.profileLik) csv += `Profile Likelihood,OR,${r.profileLik.OR},${r.profileLik.ci[0]},${r.profileLik.ci[1]},${r.profileLik.p}\n`;
+  if (r.bayesBB) csv += `Bayesian BB,median_OR,${r.bayesBB.median},${r.bayesBB.hpdCI[0]},${r.bayesBB.hpdCI[1]},P(OR>1)=${r.bayesBB.probGT1}\nBayesian BB,mean_OR,${r.bayesBB.mean},,,,\nBayesian BB,ET_CrI,${r.bayesBB.etCI[0]},${r.bayesBB.etCI[1]},,\n`;
+  if (r.loo) { csv += '\nLeave-One-Out (Peto OR)\nStudy_Removed,OR,CI_Lower,CI_Upper,P,Sig_Change\n'; r.loo.items.forEach(it => csv += `${it.study},${it.OR},${it.ci[0]},${it.ci[1]},${it.p},${it.sigChange}\n`); }
+  if (r.influence) { csv += '\nInfluence Diagnostics\nStudy,CooksD,DFBETAS,Hat,Rstudent,Flags\n'; r.influence.items.forEach(it => csv += `${it.name},${it.cooksD},${it.dfbetas},${it.hat},${it.rstudent},"${it.flags.join(';')}"\n`); }
 
   // Study-level ASD
   if (r.asd) {
@@ -2120,6 +2278,533 @@ function gradeAssessment(results) {
   return { domains, overall, overallColor, downgrades };
 }
 
+// ═══════════════════════════════════════════
+// NEW v3.1 STATISTICAL METHODS
+// ═══════════════════════════════════════════
+
+// Clopper-Pearson exact CI for a binomial proportion
+// Lower: qbeta(alpha/2, x, n-x+1) — the alpha/2 IS correct (per advanced-stats.md)
+// Upper: qbeta(1-alpha/2, x+1, n-x)
+function clopperPearsonCI(x, n, alpha) {
+  if (n <= 0) return [0, 1];
+  alpha = alpha || 0.05;
+  let lo = 0, hi = 1;
+  if (x > 0) lo = qbeta(alpha / 2, x, n - x + 1);
+  if (x < n) hi = qbeta(1 - alpha / 2, x + 1, n - x);
+  return [lo, hi];
+}
+
+// Quantile of the Beta distribution via Newton-Raphson on regularized incomplete beta
+function qbeta(p, a, b) {
+  if (p <= 0) return 0;
+  if (p >= 1) return 1;
+  if (a <= 0 || b <= 0) return NaN;
+  // Initial guess using normal approximation (Abramowitz-Stegun)
+  const lna = Math.log(a / (a + b));
+  const lnb = Math.log(b / (a + b));
+  const t = Math.sqrt(-2 * Math.log(p < 0.5 ? p : 1 - p));
+  const c0 = 2.515517, c1 = 0.802853, c2 = 0.010328;
+  const d1 = 1.432788, d2 = 0.189269, d3 = 0.001308;
+  let s = t - (c0 + c1 * t + c2 * t * t) / (1 + d1 * t + d2 * t * t + d3 * t * t * t);
+  if (p < 0.5) s = -s;
+  const lambda = (s * s - 3) / 6;
+  const h = 2 / (1 / (2 * a - 1) + 1 / (2 * b - 1));
+  const w = s * Math.sqrt(h + lambda) / h - (1 / (2 * b - 1) - 1 / (2 * a - 1)) * (lambda + 5 / 6 - 2 / (3 * h));
+  let x = a / (a + b * Math.exp(2 * w));
+  x = Math.max(1e-12, Math.min(1 - 1e-12, x));
+  // Newton-Raphson refinement
+  for (let iter = 0; iter < 40; iter++) {
+    const cdf = regBetaI(a, b, 1 - x); // P(X <= x) for Beta(a,b)
+    // Actually regBetaI(a, b, x) gives I_x(a,b) which is CDF of Beta(a,b) at x
+    const cdfx = 1 - regBetaI(b, a, 1 - x);
+    // Simpler: compute CDF directly
+    const betaCDF = regBetaI(a, b, x) !== undefined ? betaICDF(a, b, x) : 0;
+    const pdf = betaPDF(a, b, x);
+    if (pdf < 1e-30) break;
+    const delta = (betaCDF - p) / pdf;
+    x -= delta;
+    x = Math.max(1e-12, Math.min(1 - 1e-12, x));
+    if (Math.abs(delta) < 1e-12) break;
+  }
+  return x;
+}
+
+function betaICDF(a, b, x) {
+  // CDF of Beta(a,b) at x using regularized incomplete beta
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const lbetaAB = lgamma(a) + lgamma(b) - lgamma(a + b);
+  const front = Math.exp(a * Math.log(x) + b * Math.log(1 - x) - lbetaAB);
+  if (x < (a + 1) / (a + b + 2)) {
+    return front * betaCF(a, b, x) / a;
+  } else {
+    return 1 - front * betaCF(b, a, 1 - x) / b;
+  }
+}
+
+function betaPDF(a, b, x) {
+  if (x <= 0 || x >= 1) return 0;
+  const lbetaAB = lgamma(a) + lgamma(b) - lgamma(a + b);
+  return Math.exp((a - 1) * Math.log(x) + (b - 1) * Math.log(1 - x) - lbetaAB);
+}
+
+// Knapp-Hartung adjustment (Knapp & Hartung 2003, Stat Med)
+// Replace z-based CI with t_{k-1}. SE inflated by sqrt(q_KH) where q_KH = max(1, Q/(k-1))
+function knappHartung(data) {
+  const results = [];
+  // Apply KH to DL random-effects
+  const dl = dlRE(data);
+  if (dl && dl.k >= 2) {
+    const k = dl.k;
+    const alpha = parseFloat(document.getElementById('alpha').value) || 0.05;
+    // q_KH = Q / (k-1) but floored at 1 (HKSJ floor per advanced-stats.md)
+    const qKH = Math.max(1, dl.Q / (k - 1));
+    const seKH = dl.se * Math.sqrt(qKH);
+    // Use t_{k-1} NOT z (per advanced-stats.md: HKSJ df)
+    const tVal = tQuantile(1 - alpha / 2, k - 1);
+    const ciLo = Math.exp(dl.logOR - tVal * seKH);
+    const ciHi = Math.exp(dl.logOR + tVal * seKH);
+    const tStat = dl.logOR / seKH;
+    const pKH = 2 * (1 - tCDF(Math.abs(tStat), k - 1));
+    results.push({
+      method: 'DL + Knapp-Hartung',
+      OR: dl.OR, logOR: dl.logOR, se: seKH,
+      ci: [ciLo, ciHi], p: pKH, k,
+      qKH, tVal, dfKH: k - 1,
+      standardCI: dl.ci
+    });
+  }
+  // Apply KH to MH-based random-effects estimate (using DL tau2 with MH logOR)
+  const mh = mhOR(data);
+  if (mh && dl && mh.k >= 2) {
+    const k = mh.k;
+    const alpha = parseFloat(document.getElementById('alpha').value) || 0.05;
+    // Compute KH q using MH's Q statistic
+    const qKH = Math.max(1, mh.Q / (k - 1));
+    // For MH + KH, we inflate the MH SE
+    const seKH = mh.se * Math.sqrt(qKH);
+    const tVal = tQuantile(1 - alpha / 2, k - 1);
+    const ciLo = Math.exp(mh.logOR - tVal * seKH);
+    const ciHi = Math.exp(mh.logOR + tVal * seKH);
+    const tStat = mh.logOR / seKH;
+    const pKH = 2 * (1 - tCDF(Math.abs(tStat), k - 1));
+    results.push({
+      method: 'MH + Knapp-Hartung',
+      OR: mh.OR, logOR: mh.logOR, se: seKH,
+      ci: [ciLo, ciHi], p: pKH, k,
+      qKH, tVal, dfKH: k - 1,
+      standardCI: mh.ci
+    });
+  }
+  return results.length > 0 ? results : null;
+}
+
+// Profile Likelihood CI (Hardy & Thompson 1996, Stat Med)
+// Grid search: evaluate profile log-likelihood at 200 points
+function profileLikelihoodCI(data) {
+  const studies = data.filter(d => !d.excluded);
+  const items = [];
+  for (const d of studies) {
+    const a = d.et2 || d.et, b = (d.nt2 || d.nt) - a, c = d.ec2 || d.ec, dd = (d.nc2 || d.nc) - c;
+    if (a <= 0 || b <= 0 || c <= 0 || dd <= 0) continue;
+    const logOR = Math.log((a * dd) / (b * c));
+    const v = 1 / a + 1 / b + 1 / c + 1 / dd;
+    items.push({ logOR, v });
+  }
+  if (items.length < 2) return null;
+
+  // Profile log-likelihood for DL model:
+  // L(beta) = max over tau2 of sum( -0.5 * log(vi + tau2) - 0.5 * (yi - beta)^2/(vi + tau2) )
+  function profileLL(beta) {
+    // For given beta, find optimal tau2 via grid then refine
+    const k = items.length;
+    // Quick estimate: DL-style
+    let sumW = 0, sumWY = 0;
+    for (const it of items) { const w = 1 / it.v; sumW += w; sumWY += w * it.logOR; }
+    let Q = 0;
+    for (const it of items) { const w = 1 / it.v; Q += w * (it.logOR - beta) * (it.logOR - beta); }
+    let sumW2 = 0;
+    for (const it of items) sumW2 += (1 / it.v) * (1 / it.v);
+    const C = sumW - sumW2 / sumW;
+    let tau2est = Math.max(0, (Q - (k - 1)) / C);
+
+    // Refine tau2 via Newton for this beta
+    for (let iter = 0; iter < 30; iter++) {
+      let ll = 0, dll = 0, ddll = 0;
+      for (const it of items) {
+        const w = it.v + tau2est;
+        const res2 = (it.logOR - beta) * (it.logOR - beta);
+        ll += -0.5 * Math.log(w) - 0.5 * res2 / w;
+        dll += -0.5 / w + 0.5 * res2 / (w * w);
+        ddll += 0.5 / (w * w) - res2 / (w * w * w);
+      }
+      if (Math.abs(dll) < 1e-10) break;
+      const step = -dll / ddll;
+      tau2est = Math.max(0, tau2est - step);
+    }
+
+    // Evaluate log-likelihood at this (beta, tau2est)
+    let ll = 0;
+    for (const it of items) {
+      const w = it.v + tau2est;
+      ll += -0.5 * Math.log(w) - 0.5 * (it.logOR - beta) * (it.logOR - beta) / w;
+    }
+    return ll;
+  }
+
+  // Find MLE first (DL estimate)
+  const dl = dlRE(data);
+  if (!dl) return null;
+  const betaHat = dl.logOR;
+  const llMax = profileLL(betaHat);
+
+  const alpha = parseFloat(document.getElementById('alpha').value) || 0.05;
+  // chi-sq(1, alpha) quantile
+  const chiSqCrit = chiSqQuantile(1, alpha);
+  const threshold = llMax - chiSqCrit / 2;
+
+  // Grid search: 200 points around betaHat
+  const searchRange = Math.max(3 * dl.se, 1.5);
+  const lo = betaHat - searchRange;
+  const hi = betaHat + searchRange;
+  const nGrid = 200;
+  const step = (hi - lo) / nGrid;
+
+  // Find lower CI bound
+  let plCIlo = lo;
+  for (let i = 0; i <= nGrid; i++) {
+    const beta = lo + i * step;
+    if (beta >= betaHat) break;
+    if (profileLL(beta) >= threshold) { plCIlo = beta; break; }
+  }
+  // Refine lower bound via bisection
+  let bLo = lo, bHi = plCIlo;
+  for (let iter = 0; iter < 50; iter++) {
+    const mid = (bLo + bHi) / 2;
+    if (profileLL(mid) >= threshold) bHi = mid; else bLo = mid;
+    if (bHi - bLo < 1e-8) break;
+  }
+  plCIlo = (bLo + bHi) / 2;
+
+  // Find upper CI bound
+  let plCIhi = hi;
+  for (let i = nGrid; i >= 0; i--) {
+    const beta = lo + i * step;
+    if (beta <= betaHat) break;
+    if (profileLL(beta) >= threshold) { plCIhi = beta; break; }
+  }
+  // Refine upper bound via bisection
+  bLo = plCIhi; bHi = hi;
+  for (let iter = 0; iter < 50; iter++) {
+    const mid = (bLo + bHi) / 2;
+    if (profileLL(mid) >= threshold) bLo = mid; else bHi = mid;
+    if (bHi - bLo < 1e-8) break;
+  }
+  plCIhi = (bLo + bHi) / 2;
+
+  return {
+    method: 'Profile Likelihood',
+    OR: dl.OR, logOR: betaHat, se: dl.se,
+    ci: [Math.exp(plCIlo), Math.exp(plCIhi)],
+    waldCI: dl.ci,
+    p: dl.p, k: dl.k,
+    llMax, threshold
+  };
+}
+
+// Chi-squared quantile (inverse CDF) via bisection
+function chiSqQuantile(df, alpha) {
+  // Find x such that P(X > x) = alpha, i.e. P(X <= x) = 1 - alpha
+  const target = 1 - alpha;
+  let lo = 0, hi = df + 10 * Math.sqrt(2 * df);
+  for (let iter = 0; iter < 100; iter++) {
+    const mid = (lo + hi) / 2;
+    const cdf = 1 - chiSqP(mid, df); // chiSqP returns upper tail
+    if (cdf < target) lo = mid; else hi = mid;
+    if (hi - lo < 1e-10) break;
+  }
+  return (lo + hi) / 2;
+}
+
+// Leave-One-Out sensitivity analysis (Peto OR)
+function leaveOneOut(data) {
+  const studies = data.filter(d => !d.excluded && (d.et + d.ec) > 0);
+  if (studies.length < 3) return null;
+  const alpha = parseFloat(document.getElementById('alpha').value) || 0.05;
+  const zc = normalQuantile(1 - alpha / 2);
+
+  // Full Peto OR
+  let fullSumOE = 0, fullSumV = 0;
+  for (const d of studies) {
+    const n = d.nt + d.nc, E = d.et + d.ec;
+    const expected = E * d.nt / n;
+    const V = E * (n - E) * d.nt * d.nc / (n * n * (n - 1));
+    if (V > 0) { fullSumOE += (d.et - expected); fullSumV += V; }
+  }
+  const fullLogOR = fullSumOE / fullSumV;
+  const fullSE = 1 / Math.sqrt(fullSumV);
+  const fullOR = Math.exp(fullLogOR);
+  const fullP = 2 * (1 - normalCDF(Math.abs(fullLogOR / fullSE)));
+  const fullSig = fullP < alpha;
+
+  const results = [];
+  let maxInfluence = 0, mostInfluential = '';
+
+  for (let omit = 0; omit < studies.length; omit++) {
+    let sumOE = 0, sumV = 0;
+    for (let j = 0; j < studies.length; j++) {
+      if (j === omit) continue;
+      const d = studies[j];
+      const n = d.nt + d.nc, E = d.et + d.ec;
+      const expected = E * d.nt / n;
+      const V = E * (n - E) * d.nt * d.nc / (n * n * (n - 1));
+      if (V > 0) { sumOE += (d.et - expected); sumV += V; }
+    }
+    if (sumV === 0) continue;
+    const logOR = sumOE / sumV;
+    const se = 1 / Math.sqrt(sumV);
+    const OR = Math.exp(logOR);
+    const z = logOR / se;
+    const p = 2 * (1 - normalCDF(Math.abs(z)));
+    const sig = p < alpha;
+    const sigChange = sig !== fullSig;
+
+    const influence = Math.abs(logOR - fullLogOR);
+    if (influence > maxInfluence) { maxInfluence = influence; mostInfluential = studies[omit].name; }
+
+    results.push({
+      study: studies[omit].name,
+      OR, logOR, se, p,
+      ci: [Math.exp(logOR - zc * se), Math.exp(logOR + zc * se)],
+      k: studies.length - 1,
+      sigChange
+    });
+  }
+
+  return {
+    items: results,
+    fullOR, fullLogOR, fullSE, fullP, fullSig,
+    fullCI: [Math.exp(fullLogOR - zc * fullSE), Math.exp(fullLogOR + zc * fullSE)],
+    mostInfluential,
+    anyReversal: results.some(r => r.sigChange),
+    k: studies.length
+  };
+}
+
+// Influence diagnostics (adapted from Viechtbauer 2010)
+function influenceDiagnostics(data) {
+  const studies = data.filter(d => !d.excluded);
+  const items = [];
+  for (const d of studies) {
+    const a = d.et2 || d.et, b = (d.nt2 || d.nt) - a, c = d.ec2 || d.ec, dd = (d.nc2 || d.nc) - c;
+    if (a <= 0 || b <= 0 || c <= 0 || dd <= 0) continue;
+    const logOR = Math.log((a * dd) / (b * c));
+    const v = 1 / a + 1 / b + 1 / c + 1 / dd;
+    items.push({ logOR, v, name: d.name });
+  }
+  if (items.length < 3) return null;
+
+  // DL random-effects: get tau2
+  let sumW = 0, sumWY = 0;
+  for (const it of items) { const w = 1 / it.v; sumW += w; sumWY += w * it.logOR; }
+  const feBeta = sumWY / sumW;
+  let Q = 0;
+  for (const it of items) { const w = 1 / it.v; Q += w * (it.logOR - feBeta) * (it.logOR - feBeta); }
+  const k = items.length;
+  const df = k - 1;
+  let sumW2 = 0;
+  for (const it of items) sumW2 += (1 / it.v) * (1 / it.v);
+  const C = sumW - sumW2 / sumW;
+  const tau2 = Math.max(0, (Q - df) / C);
+
+  // RE weights
+  let sumWre = 0, sumWreY = 0;
+  for (const it of items) {
+    it.wRE = 1 / (it.v + tau2);
+    sumWre += it.wRE;
+    sumWreY += it.wRE * it.logOR;
+  }
+  const betaRE = sumWreY / sumWre;
+
+  // Hat values (leverage): h_i = w_i / sum(w_j)
+  for (const it of items) it.hat = it.wRE / sumWre;
+
+  // Residuals
+  for (const it of items) it.resid = it.logOR - betaRE;
+
+  // Studentized (externally) residuals
+  for (const it of items) {
+    const vResid = (it.v + tau2) * (1 - it.hat);
+    it.rstudent = vResid > 0 ? it.resid / Math.sqrt(vResid) : 0;
+  }
+
+  // Cook's distance: measures change in betaRE when study i is removed
+  // Cook_i = (beta_(-i) - beta)^2 / var(beta)
+  // Equivalent: Cook_i = h_i * r_i^2 / (1 - h_i)^2  (using standardized residual)
+  for (const it of items) {
+    const oneMinusH = 1 - it.hat;
+    if (oneMinusH > 0) {
+      it.cooksD = it.hat * it.rstudent * it.rstudent / (oneMinusH * k);
+    } else {
+      it.cooksD = Infinity;
+    }
+  }
+
+  // DFBETAS: standardized change in beta when study i removed
+  // DFBETAS_i = w_i * (y_i - beta) / (sum_w * sqrt(var(beta)))
+  const seBeta = 1 / Math.sqrt(sumWre);
+  for (const it of items) {
+    it.dfbetas = it.wRE * it.resid / (sumWre * seBeta);
+  }
+
+  // Flag thresholds
+  const meanHat = 1 / k; // average hat = 1/k
+  let nFlagged = 0;
+  for (const it of items) {
+    it.flags = [];
+    if (it.cooksD > 4 / k) it.flags.push("Cook's");
+    if (Math.abs(it.dfbetas) > 1) it.flags.push('DFBETAS');
+    if (it.hat > 3 * meanHat) it.flags.push('Leverage');
+    if (Math.abs(it.rstudent) > 2) it.flags.push('Outlier');
+    if (it.flags.length > 0) nFlagged++;
+  }
+
+  return { items, tau2, betaRE, seBeta, k, nFlagged };
+}
+
+// Bayesian conjugate beta-binomial with seeded PRNG
+// Prior: Beta(1,1) (uniform). Posterior for each arm: Beta(1+events, 1+non-events)
+// Posterior OR via Monte Carlo (10,000 draws)
+function bayesianBetaBinomial(data) {
+  const studies = data.filter(d => !d.excluded);
+  if (studies.length < 1) return null;
+
+  // Seeded xoshiro128** PRNG (per html-apps.md: determinism)
+  function xoshiro128ss(a, b, c, d) {
+    return function() {
+      const t = b << 9; let r = a * 5; r = (r << 7 | r >>> 25) * 9;
+      c ^= a; d ^= b; b ^= c; a ^= d; c ^= t;
+      d = d << 11 | d >>> 21;
+      return (r >>> 0) / 4294967296;
+    };
+  }
+  const rng = xoshiro128ss(123456789, 362436069, 521288629, 88675123);
+
+  // Beta random variate via Marsaglia-Tsang method simplified
+  // Using inverse CDF: qbeta for each draw is slow. Use Johnk's algorithm
+  function betaRandom(a, b) {
+    // Johnk's method for a,b >= 1
+    if (a < 1 || b < 1) {
+      // Use ratio of gammas approach for a,b < 1
+      // Gamma via Marsaglia-Tsang requires a >= 1; for a < 1: X = Gamma(a+1)*U^(1/a)
+      const ga = gammaRandom(a < 1 ? a + 1 : a);
+      const gb = gammaRandom(b < 1 ? b + 1 : b);
+      let ra = ga, rb = gb;
+      if (a < 1) ra *= Math.pow(rng(), 1 / a);
+      if (b < 1) rb *= Math.pow(rng(), 1 / b);
+      return ra / (ra + rb);
+    }
+    const ga = gammaRandom(a);
+    const gb = gammaRandom(b);
+    return ga / (ga + gb);
+  }
+
+  function gammaRandom(shape) {
+    // Marsaglia-Tsang method (shape >= 1)
+    if (shape < 1) {
+      return gammaRandom(shape + 1) * Math.pow(rng(), 1 / shape);
+    }
+    const d = shape - 1 / 3;
+    const c2 = 1 / Math.sqrt(9 * d);
+    while (true) {
+      let x, v;
+      do {
+        x = normalRandom();
+        v = 1 + c2 * x;
+      } while (v <= 0);
+      v = v * v * v;
+      const u = rng();
+      if (u < 1 - 0.0331 * (x * x) * (x * x)) return d * v;
+      if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+    }
+  }
+
+  let normalSpare = null;
+  function normalRandom() {
+    if (normalSpare !== null) { const s = normalSpare; normalSpare = null; return s; }
+    let u, v, s;
+    do { u = rng() * 2 - 1; v = rng() * 2 - 1; s = u * u + v * v; } while (s >= 1 || s === 0);
+    const mul = Math.sqrt(-2 * Math.log(s) / s);
+    normalSpare = v * mul;
+    return u * mul;
+  }
+
+  // Pool events across all studies for each arm
+  let totalET = 0, totalNT = 0, totalEC = 0, totalNC = 0;
+  for (const d of studies) {
+    totalET += d.et; totalNT += d.nt;
+    totalEC += d.ec; totalNC += d.nc;
+  }
+
+  // Posterior for pooled arms: Beta(1 + totalET, 1 + totalNT - totalET)
+  const aT = 1 + totalET, bT = 1 + totalNT - totalET;
+  const aC = 1 + totalEC, bC = 1 + totalNC - totalEC;
+
+  // Monte Carlo: 10,000 draws
+  const nDraws = 10000;
+  const orDraws = [];
+  for (let i = 0; i < nDraws; i++) {
+    const pT = betaRandom(aT, bT);
+    const pC = betaRandom(aC, bC);
+    // Clamp to avoid division by zero
+    const pTc = Math.max(1e-10, Math.min(1 - 1e-10, pT));
+    const pCc = Math.max(1e-10, Math.min(1 - 1e-10, pC));
+    const or = (pTc / (1 - pTc)) / (pCc / (1 - pCc));
+    orDraws.push(or);
+  }
+
+  // Sort for quantiles
+  orDraws.sort((a, b) => a - b);
+
+  // Posterior median
+  const median = orDraws[Math.floor(nDraws / 2)];
+
+  // 95% CrI (HPD - Highest Posterior Density)
+  // For HPD: find shortest interval containing 95% of draws
+  const alpha95 = 0.05;
+  const nIn = Math.ceil((1 - alpha95) * nDraws);
+  let minWidth = Infinity, hpdLo = 0, hpdHi = 0;
+  for (let i = 0; i <= nDraws - nIn; i++) {
+    const width = orDraws[i + nIn - 1] - orDraws[i];
+    if (width < minWidth) {
+      minWidth = width;
+      hpdLo = orDraws[i];
+      hpdHi = orDraws[i + nIn - 1];
+    }
+  }
+
+  // Also compute equal-tailed CrI for comparison
+  const etLo = orDraws[Math.floor(alpha95 / 2 * nDraws)];
+  const etHi = orDraws[Math.floor((1 - alpha95 / 2) * nDraws)];
+
+  // Posterior mean
+  const mean = orDraws.reduce((s, v) => s + v, 0) / nDraws;
+
+  // Prob(OR > 1)
+  const probGT1 = orDraws.filter(v => v > 1).length / nDraws;
+
+  return {
+    method: 'Bayesian Conjugate BB',
+    median, mean,
+    hpdCI: [hpdLo, hpdHi],
+    etCI: [etLo, etHi],
+    probGT1,
+    aT, bT, aC, bC,
+    k: studies.length,
+    nDraws
+  };
+}
+
 // 12. CC Sensitivity Analysis
 function ccSensitivityAnalysis(rawData) {
   const corrections = [0, 0.1, 0.25, 0.5, 1.0];
@@ -2336,6 +3021,216 @@ function renderCCSensitivity() {
 }
 
 // ═══════════════════════════════════════════
+// GALBRAITH PLOT
+// ═══════════════════════════════════════════
+function renderGalbraith() {
+  const canvas = document.getElementById('galbraithCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const r = lastResults;
+  if (!r) return;
+  const studies = r.data.filter(d => !d.excluded);
+  const items = [];
+  for (const d of studies) {
+    const a = d.et2 || d.et, b = (d.nt2 || d.nt) - a, c = d.ec2 || d.ec, dd = (d.nc2 || d.nc) - c;
+    if (a <= 0 || b <= 0 || c <= 0 || dd <= 0) continue;
+    const logOR = Math.log((a * dd) / (b * c));
+    const se = Math.sqrt(1 / a + 1 / b + 1 / c + 1 / dd);
+    const precision = 1 / se;
+    const zScore = logOR / se;
+    items.push({ name: d.name, precision, zScore, logOR, se });
+  }
+  if (items.length < 3) return;
+
+  const refLogOR = r.peto ? r.peto.logOR : (r.mh ? r.mh.logOR : 0);
+
+  const pad = { top: 50, right: 40, bottom: 60, left: 70 };
+  const pw = W - pad.left - pad.right, ph = H - pad.top - pad.bottom;
+
+  const precMax = Math.max(...items.map(it => it.precision)) * 1.15;
+  const precMin = 0;
+  const zAll = items.map(it => it.zScore);
+  const zBandMax = Math.max(Math.abs(refLogOR * precMax) + 1.96, ...zAll.map(Math.abs)) * 1.15;
+
+  const xScale = v => pad.left + ((v - precMin) / (precMax - precMin)) * pw;
+  const yScale = v => pad.top + ph / 2 - (v / zBandMax) * (ph / 2);
+
+  // Grid
+  ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 5; i++) {
+    const pv = precMin + (precMax - precMin) * (i / 5);
+    ctx.beginPath(); ctx.moveTo(xScale(pv), pad.top); ctx.lineTo(xScale(pv), H - pad.bottom); ctx.stroke();
+    ctx.fillStyle = '#64748b'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(pv.toFixed(1), xScale(pv), H - pad.bottom + 15);
+  }
+  for (let i = -3; i <= 3; i++) {
+    const zv = zBandMax * (i / 3);
+    ctx.beginPath(); ctx.moveTo(pad.left, yScale(zv)); ctx.lineTo(W - pad.right, yScale(zv)); ctx.stroke();
+    ctx.fillStyle = '#64748b'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(zv.toFixed(1), pad.left - 6, yScale(zv) + 4);
+  }
+
+  // Zero line
+  ctx.strokeStyle = '#475569'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.left, yScale(0)); ctx.lineTo(W - pad.right, yScale(0)); ctx.stroke();
+
+  // Regression line through origin: slope = pooled logOR
+  ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(xScale(0), yScale(0));
+  ctx.lineTo(xScale(precMax), yScale(refLogOR * precMax));
+  ctx.stroke();
+
+  // 95% confidence band: +-1.96
+  ctx.strokeStyle = 'rgba(239,68,68,0.3)'; ctx.lineWidth = 1.5; ctx.setLineDash([6, 3]);
+  ctx.beginPath();
+  ctx.moveTo(xScale(0), yScale(1.96));
+  ctx.lineTo(xScale(precMax), yScale(refLogOR * precMax + 1.96));
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(xScale(0), yScale(-1.96));
+  ctx.lineTo(xScale(precMax), yScale(refLogOR * precMax - 1.96));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Points
+  for (const it of items) {
+    const x = xScale(it.precision), y = yScale(it.zScore);
+    const expectedZ = refLogOR * it.precision;
+    const isOutlier = Math.abs(it.zScore - expectedZ) > 1.96;
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = isOutlier ? '#ef4444' : '#e2e8f0';
+    ctx.fill();
+    ctx.strokeStyle = isOutlier ? '#fca5a5' : '#94a3b8'; ctx.lineWidth = 1.5; ctx.stroke();
+    if (isOutlier) {
+      ctx.fillStyle = '#f87171'; ctx.font = '9px sans-serif'; ctx.textAlign = 'left';
+      ctx.fillText(it.name, x + 7, y + 3);
+    }
+  }
+
+  // Labels
+  ctx.fillStyle = '#94a3b8'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('1/SE (precision)', pad.left + pw / 2, H - 10);
+  ctx.save(); ctx.translate(14, pad.top + ph / 2); ctx.rotate(-Math.PI / 2);
+  ctx.fillText('logOR / SE (Z-score)', 0, 0); ctx.restore();
+  ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 13px sans-serif';
+  ctx.fillText('Galbraith (Radial) Plot  |  Slope = ' + refLogOR.toFixed(4), pad.left + pw / 2, pad.top - 15);
+
+  // Legend
+  ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillStyle = '#e2e8f0';
+  ctx.beginPath(); ctx.arc(W - pad.right - 130, pad.top + 15, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillText('Within band', W - pad.right - 122, pad.top + 18);
+  ctx.fillStyle = '#ef4444';
+  ctx.beginPath(); ctx.arc(W - pad.right - 130, pad.top + 32, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillText('Outlier (het. driver)', W - pad.right - 122, pad.top + 35);
+}
+
+// ═══════════════════════════════════════════
+// LOO RENDERING
+// ═══════════════════════════════════════════
+function renderLOO() {
+  const r = lastResults;
+  if (!r) return;
+
+  const loo = leaveOneOut(r.data);
+  lastResults.loo = loo;
+
+  if (!loo) {
+    document.getElementById('looSummary').innerHTML = '<p style="color:var(--text2)">Need 3+ informative studies for LOO analysis.</p>';
+    document.querySelector('#looTable tbody').innerHTML = '';
+    return;
+  }
+
+  // Summary
+  const reversal = loo.anyReversal ? '<span class="badge badge-red">Yes</span>' : '<span class="badge badge-green">No</span>';
+  document.getElementById('looSummary').innerHTML = `
+    <div class="stat-box"><div class="value">${loo.fullOR.toFixed(3)}</div><div class="label">Full Peto OR</div></div>
+    <div class="stat-box"><div class="value">${loo.fullCI[0].toFixed(3)} to ${loo.fullCI[1].toFixed(3)}</div><div class="label">Full 95% CI</div></div>
+    <div class="stat-box"><div class="value">${loo.mostInfluential}</div><div class="label">Most Influential</div></div>
+    <div class="stat-box"><div class="value">${reversal}</div><div class="label">Significance Reversal?</div></div>
+    <div class="stat-box"><div class="value">${loo.k}</div><div class="label">Total Studies</div></div>
+  `;
+
+  // Table
+  document.querySelector('#looTable tbody').innerHTML = loo.items.map(it => {
+    const sigStr = it.sigChange ? '<span class="badge badge-red">REVERSED</span>' : '<span class="badge badge-green">No</span>';
+    return `<tr><td>${it.study}</td><td>${it.OR.toFixed(3)}</td><td>${it.ci[0].toFixed(3)} \u2013 ${it.ci[1].toFixed(3)}</td><td>${it.p < 0.001 ? it.p.toExponential(2) : it.p.toFixed(4)}</td><td>${it.k}</td><td>${sigStr}</td></tr>`;
+  }).join('');
+
+  // Forest plot of LOO ORs
+  const canvas = document.getElementById('looCanvas');
+  const rows = loo.items.length + 2;
+  canvas.height = Math.max(400, rows * 28 + 100);
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const pad = { top: 40, right: 120, bottom: 40, left: 200 };
+  const pw = W - pad.left - pad.right;
+
+  const allLogOR = [...loo.items.flatMap(it => [Math.log(it.ci[0]), Math.log(it.ci[1])]),
+                     Math.log(loo.fullCI[0]), Math.log(loo.fullCI[1])];
+  const logMin = Math.min(...allLogOR, -0.1);
+  const logMax = Math.max(...allLogOR, 0.1);
+  const xScale = v => pad.left + ((v - logMin) / (logMax - logMin)) * pw;
+  const rowH = 24;
+
+  // Null line
+  ctx.strokeStyle = '#475569'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(xScale(0), pad.top); ctx.lineTo(xScale(0), H - pad.bottom); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Full estimate reference band
+  ctx.fillStyle = 'rgba(239,68,68,0.08)';
+  ctx.fillRect(xScale(loo.fullLogOR - 1.96 * loo.fullSE), pad.top,
+               xScale(loo.fullLogOR + 1.96 * loo.fullSE) - xScale(loo.fullLogOR - 1.96 * loo.fullSE), H - pad.top - pad.bottom);
+
+  // Header
+  ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('Study Omitted', 10, pad.top - 10);
+  ctx.textAlign = 'center'; ctx.fillText('OR (95% CI) with study removed', pad.left + pw / 2, pad.top - 10);
+
+  loo.items.forEach((it, i) => {
+    const y = pad.top + 10 + i * rowH;
+    ctx.fillStyle = it.sigChange ? '#fca5a5' : '#e2e8f0'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(it.study, pad.left - 8, y + 4);
+    const lo = Math.log(it.ci[0]), hi = Math.log(it.ci[1]);
+    const color = it.sigChange ? '#f59e0b' : '#06b6d4';
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(xScale(lo), y); ctx.lineTo(xScale(hi), y); ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.fillRect(xScale(it.logOR) - 4, y - 4, 8, 8);
+    ctx.fillStyle = '#94a3b8'; ctx.font = '10px monospace'; ctx.textAlign = 'left';
+    ctx.fillText(`${it.OR.toFixed(2)} [${it.ci[0].toFixed(2)}, ${it.ci[1].toFixed(2)}]`, W - pad.right + 5, y + 4);
+  });
+
+  // Full estimate diamond
+  const divY = pad.top + 10 + loo.items.length * rowH + 8;
+  ctx.strokeStyle = '#475569'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(10, divY); ctx.lineTo(W - 10, divY); ctx.stroke();
+  const y = divY + 20;
+  const lx = xScale(Math.log(loo.fullCI[0])), rx = xScale(Math.log(loo.fullCI[1])), cx = xScale(loo.fullLogOR);
+  ctx.beginPath(); ctx.moveTo(lx, y); ctx.lineTo(cx, y - 6); ctx.lineTo(rx, y); ctx.lineTo(cx, y + 6); ctx.closePath();
+  ctx.fillStyle = '#ef4444'; ctx.globalAlpha = 0.7; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.fillStyle = '#ef4444'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'right';
+  ctx.fillText('Full Peto OR', pad.left - 8, y + 4);
+  ctx.fillStyle = '#94a3b8'; ctx.font = '10px monospace'; ctx.textAlign = 'left';
+  ctx.fillText(`${loo.fullOR.toFixed(2)} [${loo.fullCI[0].toFixed(2)}, ${loo.fullCI[1].toFixed(2)}]`, W - pad.right + 5, y + 4);
+
+  // x-axis labels
+  ctx.fillStyle = '#64748b'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+  const ticks = [0.1, 0.25, 0.5, 1, 2, 4, 10].filter(t => Math.log(t) >= logMin && Math.log(t) <= logMax);
+  for (const t of ticks) {
+    const x = xScale(Math.log(t));
+    ctx.beginPath(); ctx.moveTo(x, H - pad.bottom); ctx.lineTo(x, H - pad.bottom + 5); ctx.strokeStyle = '#475569'; ctx.stroke();
+    ctx.fillText(t.toString(), x, H - pad.bottom + 18);
+  }
+  ctx.fillText('Favours treatment \u2190     \u2192 Favours control', pad.left + pw / 2, H - 8);
+}
+
+// ═══════════════════════════════════════════
 // EXAMPLES
 // ═══════════════════════════════════════════
 const EXAMPLES={
@@ -2436,6 +3331,9 @@ function exportCSV(){
   if(r.tf)csv+=`Trim-and-Fill (sens only),adj_OR,${r.tf.adjOR},${r.tf.adjCI[0]},${r.tf.adjCI[1]},k0=${r.tf.k0}\n`;
   if(r.doi)csv+=`Doi/LFK,index,${r.doi.lfkIndex},class=${r.doi.lfkClass},,\n`;
   if(r.grade)csv+=`GRADE,overall,${r.grade.overall},downgrades=${r.grade.downgrades},,\n`;
+  if(r.kh)r.kh.forEach(m=>csv+=`${m.method},OR,${m.OR},${m.ci[0]},${m.ci[1]},${m.p}\n`);
+  if(r.profileLik)csv+=`Profile Likelihood,OR,${r.profileLik.OR},${r.profileLik.ci[0]},${r.profileLik.ci[1]},${r.profileLik.p}\n`;
+  if(r.bayesBB)csv+=`Bayesian BB,median_OR,${r.bayesBB.median},${r.bayesBB.hpdCI[0]},${r.bayesBB.hpdCI[1]},P(OR>1)=${r.bayesBB.probGT1}\n`;
   const blob=new Blob([csv],{type:'text/csv'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='safety_ma_results.csv';
   document.body.appendChild(a);a.click();document.body.removeChild(a);
