@@ -95,16 +95,16 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
       Enter one study per line: Study name, events_treatment, n_treatment, events_control, n_control. Tab/comma separated.
     </div>
     <div class="grid-2">
-      <div><label>Drug / Treatment name</label><input type="text" id="drugName" value="Rosiglitazone" placeholder="Treatment"></div>
-      <div><label>Safety outcome</label><input type="text" id="outcomeName" value="Myocardial infarction" placeholder="Adverse event"></div>
+      <div><label>Drug / Treatment name</label><input type="text" id="drugName" value="Rosiglitazone" placeholder="Treatment" aria-label="Study Data (2×2 tables)"></div>
+      <div><label>Safety outcome</label><input type="text" id="outcomeName" value="Myocardial infarction" placeholder="Adverse event" aria-label="Drug / Treatment name"></div>
     </div>
     <div style="margin-top:12px">
       <label>Study data (study, events_trt, n_trt, events_ctrl, n_ctrl)</label>
-      <textarea id="dataInput" rows="14" placeholder="Study1  5  100  2  100&#10;Study2  0  50  0  48"></textarea>
+      <textarea id="dataInput" rows="14" placeholder="Study1  5  100  2  100&#10;Study2  0  50  0  48" aria-label="Study data (study, events_trt, n_trt, events_ctrl, n_ctrl)"></textarea>
     </div>
     <div class="grid-3" style="margin-top:12px">
       <div><label>Zero-cell correction</label>
-        <select id="zcCorrection">
+        <select id="zcCorrection" aria-label="Zero-cell correction">
           <option value="0.5">Add 0.5 (traditional)</option>
           <option value="reciprocal">Reciprocal (treatment-arm)</option>
           <option value="empirical">Empirical (Sweeting)</option>
@@ -112,13 +112,13 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
         </select>
       </div>
       <div><label>Double-zero studies</label>
-        <select id="doubleZero">
+        <select id="doubleZero" aria-label="Double-zero studies">
           <option value="exclude">Exclude (standard)</option>
           <option value="include">Include with correction</option>
         </select>
       </div>
       <div><label>Significance level (α)</label>
-        <input type="number" id="alpha" value="0.05" step="0.01" min="0.001" max="0.2">
+        <input type="number" id="alpha" value="0.05" step="0.01" min="0.001" max="0.2" aria-label="Significance level (α)">
       </div>
     </div>
     <div class="btn-group">
@@ -284,7 +284,7 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
     <h3>Absolute Risk Increase with Baseline Risk Adjustment</h3>
     <div class="info-box">ARI = (pooled RR - 1) x baseline risk. More clinically meaningful than trial-derived RD. NNH = 1/ARI. Adjust assumed baseline risk to your population.</div>
     <div class="grid-3" style="margin-bottom:12px">
-      <div><label>Assumed baseline risk (%)</label><input type="number" id="baselineRisk" value="2" step="0.1" min="0.01" max="100" onchange="renderAdvanced()"></div>
+      <div><label>Assumed baseline risk (%)</label><input type="number" id="baselineRisk" value="2" step="0.1" min="0.01" max="100" onchange="renderAdvanced()" aria-label="Absolute Risk Increase with Baseline Risk Adjustment"></div>
       <div></div><div></div>
     </div>
     <div class="stat-grid" id="advARISummary"></div>
