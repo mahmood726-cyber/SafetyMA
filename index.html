@@ -367,6 +367,7 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
 </div>
 
 <script>
+function escapeHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
 // ═══════════════════════════════════════════
 // STATISTICAL CORE
 // ═══════════════════════════════════════════
@@ -649,7 +650,7 @@ function renderResults(){
   const hets=[r.mh,r.dl].filter(m=>m&&m.Q!==undefined);
   document.querySelector('#hetTable tbody').innerHTML=hets.map(m=>`<tr><td>${m.method}</td><td>${m.Q.toFixed(2)}</td><td>${m.k-1}</td><td>${m.Qp.toFixed(4)}</td><td>${m.I2.toFixed(1)}%</td><td>${m.tau2!==undefined?m.tau2.toFixed(4):'—'}</td></tr>`).join('');
 
-  document.getElementById('zeroCellSummary').innerHTML=`<p>Double-zero studies: <strong>${dz}</strong> ${dz>0?'('+document.getElementById('doubleZero').value+')':''} | Single-zero: <strong>${sz}</strong> | Correction: <strong>${document.getElementById('zcCorrection').value}</strong></p>`;
+  document.getElementById('zeroCellSummary').innerHTML=`<p>Double-zero studies: <strong>${dz}</strong> ${dz>0?'('+escapeHtml(document.getElementById('doubleZero').value)+')':''} | Single-zero: <strong>${sz}</strong> | Correction: <strong>${escapeHtml(document.getElementById('zcCorrection').value)}</strong></p>`;
 
   // Study table
   const included=r.data.filter(d=>!d.excluded);
