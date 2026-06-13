@@ -463,7 +463,7 @@ function petoOR(data){
 function mhOR(data){
   const studies=data.filter(d=>!d.excluded);
   if(studies.length===0)return null;
-  let sumR=0,sumS=0,sumRS=0,sumR2S=0,sumS2R=0,sumRS2=0;
+  let sumR=0,sumS=0,sumPR=0,sumQS=0,sumPSQR=0;
   for(const d of studies){
     const a=d.et2||d.et,b=(d.nt2||d.nt)-a,c=d.ec2||d.ec,dd=(d.nc2||d.nc)-c;
     const n=a+b+c+dd;
@@ -471,19 +471,17 @@ function mhOR(data){
     const R=a*dd/n;
     const S=b*c/n;
     sumR+=R;sumS+=S;
-    // Robins-Breslow-Greenland variance
+    // Robins-Breslow-Greenland variance accumulators
     const P=(a+dd)/n,Q=(b+c)/n;
-    sumRS+=((a+dd)*a*dd/n+(b+c)*b*c/n)/(n);
-    sumR2S+=(P*R);
-    sumS2R+=(Q*S);
-    sumRS2+=(P*S+Q*R);
+    sumPR+=(P*R);
+    sumQS+=(Q*S);
+    sumPSQR+=(P*S+Q*R);
   }
-  if(sumS===0)return null;
+  if(sumS===0||sumR===0)return null;
   const OR=sumR/sumS;
   const logOR=Math.log(OR);
-  // RBG variance
-  const V=sumRS/(2*sumR*sumR)+sumRS2/(2*sumR*sumS)+sumR2S/(2*sumS*sumS);
-  // Simpler Greenland-Robins variance
+  // Robins-Breslow-Greenland variance of ln(OR_MH) (Greenland & Robins 1985)
+  const V=sumPR/(2*sumR*sumR)+sumPSQR/(2*sumR*sumS)+sumQS/(2*sumS*sumS);
   const se=Math.sqrt(V);
   const z=logOR/se;
   const p=2*(1-normalCDF(Math.abs(z)));
