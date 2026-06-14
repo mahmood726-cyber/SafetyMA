@@ -133,6 +133,7 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
   <div class="card"><h3>Summary</h3><div id="summaryStats" class="stat-grid"></div></div>
   <div class="card">
     <h3>Method Comparison</h3>
+    <div id="petoWarning"></div>
     <table id="methodTable"><thead><tr><th>Method</th><th>OR</th><th>95% CI</th><th>P-value</th><th>Studies</th><th>Note</th></tr></thead><tbody></tbody></table>
   </div>
   <div class="card">
@@ -334,8 +335,8 @@ footer{text-align:center;padding:30px 0;color:var(--text2);font-size:0.82rem;bor
     <h3>Pharmacovigilance MA — Method Guide</h3>
     <div class="info-box"><strong>Why safety MA is different:</strong> Adverse events are often rare (<5%), many studies report zero events, and even small risk increases matter for population-level safety. Standard DerSimonian-Laird can fail with sparse data.</div>
     <table>
-      <tr><td><strong>Peto OR</strong></td><td>Gold standard for rare events (<1%). Unbiased, no zero-cell correction needed. Breaks down when treatment groups are very unbalanced or events are common.</td></tr>
-      <tr><td><strong>Mantel-Haenszel</strong></td><td>Good for rare events. Needs correction for zero cells. More robust than IV methods with sparse data.</td></tr>
+      <tr><td><strong>Peto OR</strong></td><td>Useful for very rare events (<1%) with balanced arms and OR near 1; no zero-cell correction needed. <strong>Biased and under-covers when the pooled OR is far from 1 or treatment groups are unbalanced</strong> (Cochrane Handbook §10.4.4.1; Bradburn 2007) — not recommended as the primary estimator in those settings.</td></tr>
+      <tr><td><strong>Mantel-Haenszel (recommended)</strong></td><td>Robust default for rare-event pooling. With Robins-Breslow-Greenland variance it stays unbiased with near-nominal coverage even when the OR is far from 1 or arms are imbalanced. Needs correction only for zero cells. Recommended primary estimator.</td></tr>
       <tr><td><strong>DL Random Effects</strong></td><td>Standard random-effects. Can be biased with rare events. Use with caution for safety data.</td></tr>
       <tr><td><strong>Zero-cell handling</strong></td><td>Add 0.5 is traditional but biases OR→1. Reciprocal and empirical (Sweeting) corrections are less biased. Double-zero studies are uninformative for OR.</td></tr>
       <tr><td><strong>Sequential monitoring</strong></td><td>O'Brien-Fleming boundaries detect safety signals early without inflating type I error. Critical for post-marketing surveillance.</td></tr>
@@ -621,13 +622,32 @@ function renderResults(){
     <div class="stat-box"><div class="value">${dz}/${sz}</div><div class="label">Double-zero / Single-zero</div></div>
     <div class="stat-box"><div class="value">${totalE_trt}/${totalN_trt}</div><div class="label">Events/N (Treatment)</div></div>
     <div class="stat-box"><div class="value">${totalE_ctrl}/${totalN_ctrl}</div><div class="label">Events/N (Control)</div></div>
-    <div class="stat-box"><div class="value">${r.peto?r.peto.OR.toFixed(2):'N/A'}</div><div class="label">Peto OR</div></div>
+    <div class="stat-box"><div class="value">${r.mh?r.mh.OR.toFixed(2):'N/A'}</div><div class="label">Mantel-Haenszel OR <span class="badge badge-green">Recommended</span></div></div>
   `;
+
+  // Peto OR is biased and under-covers when the pooled OR is far from 1 or arms
+  // are imbalanced (Cochrane Handbook 10.4.4.1; Bradburn 2007). Measured here:
+  // OR=0.2 -> log-bias +0.27, coverage 0.81; 4:1 imbalance -> bias +/-0.13, coverage ~0.86.
+  // MH (Robins-Breslow-Greenland) is robust (|bias|<=0.026, coverage 0.95-0.96).
+  const refLogOR=(r.mh?r.mh.logOR:(r.peto?r.peto.logOR:0));
+  const maxArmRatio=r.data.filter(d=>!d.excluded).reduce((mx,d)=>{
+    const lo=Math.min(d.nt,d.nc),hi=Math.max(d.nt,d.nc);
+    return lo>0?Math.max(mx,hi/lo):mx;
+  },1);
+  const petoUnreliable=Math.abs(refLogOR)>Math.log(2.5)||maxArmRatio>=2;
+  if(petoUnreliable&&r.peto){
+    document.getElementById('petoWarning').innerHTML=`<div class="info-box" style="background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);color:var(--text2)"><strong style="color:var(--amber)">\u26a0 Peto OR may be unreliable here.</strong> The pooled OR is far from 1 (OR&asymp;${Math.exp(refLogOR).toFixed(2)}) ${maxArmRatio>=2?`and/or treatment:control arm sizes are imbalanced (up to ${maxArmRatio.toFixed(1)}:1)`:''}. Under these conditions the Peto OR is biased and its CI under-covers (Cochrane Handbook \u00a710.4.4.1; Bradburn 2007) \u2014 prefer the <strong>Mantel-Haenszel (Robins\u2013Breslow\u2013Greenland)</strong> estimate, which is robust across these regimes.</div>`;
+  }else{
+    document.getElementById('petoWarning').innerHTML='';
+  }
 
   const methods=[r.peto,r.mh,r.dl].filter(Boolean);
   const methodRows=methods.map(m=>{
     const sig=m.p<0.05;
-    return`<tr><td><strong>${m.method}</strong></td><td>${m.OR.toFixed(3)}</td><td>${m.ci[0].toFixed(3)} \u2013 ${m.ci[1].toFixed(3)}</td><td>${m.p<0.001?m.p.toExponential(2):m.p.toFixed(4)}</td><td>${m.k}</td><td>${sig?'<span class="badge badge-red">Signal</span>':'<span class="badge badge-green">No signal</span>'}</td></tr>`;
+    const isMH=m.method==='Mantel-Haenszel OR';
+    const isPeto=m.method==='Peto OR';
+    const noteBadge=isMH?' <span class="badge badge-green">Recommended</span>':(isPeto&&petoUnreliable?' <span class="badge badge-amber">Biased here \u2014 see note</span>':'');
+    return`<tr${isMH?' style="background:rgba(34,197,94,0.06)"':''}><td><strong>${m.method}</strong></td><td>${m.OR.toFixed(3)}</td><td>${m.ci[0].toFixed(3)} \u2013 ${m.ci[1].toFixed(3)}</td><td>${m.p<0.001?m.p.toExponential(2):m.p.toFixed(4)}</td><td>${m.k}</td><td>${sig?'<span class="badge badge-red">Signal</span>':'<span class="badge badge-green">No signal</span>'}${noteBadge}</td></tr>`;
   });
   // Knapp-Hartung adjusted rows
   if(r.kh){
